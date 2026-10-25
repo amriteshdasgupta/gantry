@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Create and edit workspace and ticket graph drafts with an inline AI assistant, using configured providers to propose nodes, stage prompts, and routing conditions. Keep the canvas editable, reject stale proposals, and undo assistant changes before saving.
+
 ## [0.1.1] - 2026-10-26
 
 ### Fixed
