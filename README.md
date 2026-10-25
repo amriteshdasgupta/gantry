@@ -2,12 +2,7 @@
 
 # Gantry
 
-### Your models. Your workflow. A graph you control.
-
-**Build the graph your coding agents follow—from the first plan to the final review.**
-
-Design the steps. Choose the models. Connect the decisions and feedback loops.<br>
-Gantry turns your development process into a visible, repeatable workflow—in one desktop app.
+### A Graph for your agents to follow
 
 [**Get started ↓**](#get-started) · [Explore the docs](docs/FAQ.md) · [Give feedback](https://github.com/Drajax69/gantry/issues)
 
@@ -17,14 +12,6 @@ Open source · macOS & Windows · MIT licensed
 </div>
 
 ## Stop repeating the process. Build it into the graph.
-
-You know how you want software built: understand the problem, make a plan, implement, test, review, fix what the review catches. Gantry lets you give that process to your models.
-
-**Create your own graph on a visual canvas.** Every node is a task with its own instructions and model. Every connection describes when to move to the next step. Branch by outcome, loop back for corrections, and save the workflow as a template for the next ticket.
-
-### Build. Review. Improve. Then open the PR.
-
-Give planning, implementation, and review their own stages. Send requested changes back to the builder. Route approved work to a pull request. **Make the quality checks part of the process, every time.**
 
 <img alt="Gantry's graph editor showing planning, implementation and testing, review, and pull request stages, with a changes-requested loop back to implementation." src="docs/images/graph-review-loop.png" width="1600">
 
