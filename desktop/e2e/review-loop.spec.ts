@@ -9,15 +9,15 @@ test.beforeEach(() => {
     const location = path.resolve('e2e/.tmp/home', file);
     savedFiles.set(location, fs.existsSync(location) ? fs.readFileSync(location) : null);
   }
-  fs.rmSync(path.resolve('e2e/.tmp/home/workflow-runs/ticket-1.json'), { force: true });
-  fs.rmSync(path.resolve('e2e/.tmp/home/ticket-conversations/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'workflow-runs/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'ticket-conversations/ticket-1.json'), { force: true });
 });
 
 test.afterEach(async ({ request }) => {
-  fs.rmSync(path.resolve('e2e/.tmp/home/fail-comments'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'fail-comments'), { force: true });
   await request.post('/api/gantry/api/tickets/ticket-1/update', { data: { status: 'done' } });
   await request.get('/api/gantry/api/status');
-  fs.rmSync(path.resolve('e2e/.tmp/home/workflow-runs/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'workflow-runs/ticket-1.json'), { force: true });
   for (const [file, contents] of savedFiles) {
     if (contents) fs.writeFileSync(file, contents);
     else fs.rmSync(file, { force: true });
@@ -49,11 +49,11 @@ test('review graph restarts implementation with durable PR and local discussion 
   expect((await request.post('/api/review-loop', { data: { ...payload, confirm: false } })).ok()).toBe(false);
   const invalid = await request.post('/api/review-loop', { data: { ...payload, nodeId: 'missing' } });
   expect((await invalid.json()).error).toContain('Choose a stage');
-  fs.writeFileSync(path.resolve('e2e/.tmp/home/fail-comments'), 'offline');
+  fs.writeFileSync(path.resolve('e2e/.tmp', 'home', 'fail-comments'), 'offline');
   const failedRefresh = await request.post('/api/review-loop', { data: payload });
   expect((await failedRefresh.json()).error).toContain('Could not refresh PR feedback');
   expect(await execution()).toEqual(before);
-  fs.rmSync(path.resolve('e2e/.tmp/home/fail-comments'));
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'fail-comments'));
 
   // The dialog resolves the exact embedded space instead of guessing a ticket from the PR.
   await page.goto(`/space/${spaceId}?pr=${encodeURIComponent(targetId)}`);
@@ -83,7 +83,7 @@ test('review graph restarts implementation with durable PR and local discussion 
     expect(feedback).toContain(text);
 
   const calls = fs
-    .readFileSync(path.resolve('e2e/.tmp/home/claude-calls.jsonl'), 'utf8')
+    .readFileSync(path.resolve('e2e/.tmp', 'home', 'claude-calls.jsonl'), 'utf8')
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line));
@@ -92,7 +92,7 @@ test('review graph restarts implementation with durable PR and local discussion 
     expect(call.prompt).toContain('Keep the public API stable');
   }
   expect(calls.filter((c: { prompt: string }) => c.prompt.includes('PR review feedback') && c.prompt.includes('Add regression coverage'))).toHaveLength(2);
-  const saved = JSON.parse(fs.readFileSync(path.resolve('e2e/.tmp/home/workflow-runs/ticket-1.json'), 'utf8'));
+  const saved = JSON.parse(fs.readFileSync(path.resolve('e2e/.tmp', 'home', 'workflow-runs/ticket-1.json'), 'utf8'));
   expect(saved.reviewFeedback).toEqual(after.reviewFeedback);
 
   const stale = await request.post('/api/review-loop', { data: { targetId, spaceId, nodeId: 'build', expectedUpdatedAt: before.updatedAt, confirm: true } });

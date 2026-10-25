@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 test('edits the creation graph, preserves failed drafts, and returns to the board', async ({ page, request }) => {
-  fs.rmSync(path.resolve('e2e/.tmp/home/workflow-runs/ticket-1.json'), { force: true });
-  fs.rmSync(path.resolve('e2e/.tmp/home/ticket-conversations/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'workflow-runs/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'ticket-conversations/ticket-1.json'), { force: true });
   const before = await (await request.get('/api/gantry/api/projects/fixture/workflow-templates')).json();
   const graph = {
     autoStart: false,
@@ -67,8 +67,8 @@ test('edits the creation graph, preserves failed drafts, and returns to the boar
 });
 
 test('selects named graphs and saves an unsaved ticket draft as a separate template', async ({ page, request }) => {
-  fs.rmSync(path.resolve('e2e/.tmp/home/workflow-runs/ticket-1.json'), { force: true });
-  fs.rmSync(path.resolve('e2e/.tmp/home/ticket-conversations/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'workflow-runs/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'ticket-conversations/ticket-1.json'), { force: true });
   const graph = {
     autoStart: false,
     nodes: [{ id: 'fix', label: 'Quick fix', kind: 'agent', instructions: 'Implement and verify.', dependsOn: [] }],

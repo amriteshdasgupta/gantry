@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 test.beforeEach(() => {
-  fs.rmSync(path.resolve('e2e/.tmp/home/workflow-runs/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'workflow-runs/ticket-1.json'), { force: true });
 });
 
 test('a running stage chat opens only after pausing, since herdr resumes the same session', async ({ page, request }) => {
@@ -46,7 +46,7 @@ test('a running stage chat opens only after pausing, since herdr resumes the sam
 test('Codex conversation creation and reopening still preserve the native session', async ({ request }) => {
   const fs = await import('node:fs');
   const path = await import('node:path');
-  const association = path.resolve('e2e/.tmp/home/ticket-conversations/ticket-1.json');
+  const association = path.resolve('e2e/.tmp', 'home', 'ticket-conversations/ticket-1.json');
   fs.rmSync(association, {force:true});
   const created = await request.post('/api/agents', {data:{kind:'codex',name:'Live Codex fixture'}});
   const agent = await created.json();

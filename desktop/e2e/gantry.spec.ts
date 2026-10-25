@@ -62,7 +62,7 @@ test('Gantry ticket, preview and review workflow stays inside Gantry', async ({ 
   await page.reload();
   await expect(page.getByRole('tab',{name:'fixture #1',exact:true})).toBeVisible();
   await page.request.patch('/api/spaces',{data:{id:initialSpaces.current,makeCurrent:true}});
-  fs.rmSync(path.resolve('e2e/.tmp/home/ticket-conversations/ticket-1.json'),{force:true});
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'ticket-conversations/ticket-1.json'),{force:true});
 });
 
 test('Gantry proxy rejects cross-origin mutations and unsupported routes', async ({ request }) => {
@@ -196,7 +196,7 @@ test('tickets drag between columns and reopen one external Codex conversation', 
   const codex = agents.agents.find((a:{kind:string}) => a.kind === 'codex') || await (await request.post('/api/agents',{data:{kind:'codex',name:'Codex'}})).json();
   await request.patch('/api/agents',{data:{id:codex.id,current:true}});
   await page.reload();
-  const launches = path.resolve('e2e/.tmp/home/external-launches.jsonl');
+  const launches = path.resolve('e2e/.tmp', 'home', 'external-launches.jsonl');
   await page.getByRole('button',{name:'Workspace graph',exact:true}).click();
   await page.getByRole('button',{name:'Edit shared instructions',exact:true}).click();
   await page.getByLabel('Starting prompt',{exact:true}).fill('Workspace delivery rule: implement ${ticket.title}, validate, then create a PR.');
@@ -224,7 +224,7 @@ test('tickets drag between columns and reopen one external Codex conversation', 
   expect(herdrRuns()).toHaveLength(1);
   expect(herdrRuns()[0].script).toContain(`'resume' '${id}'`);
   expect(herdrRuns()[0].script).toContain('Start the work described above.');
-  const protocol = fs.readFileSync(path.resolve('e2e/.tmp/home/codex-protocol.jsonl'),'utf8').trim().split('\n').map(l=>JSON.parse(l));
+  const protocol = fs.readFileSync(path.resolve('e2e/.tmp', 'home', 'codex-protocol.jsonl'),'utf8').trim().split('\n').map(l=>JSON.parse(l));
   expect(protocol.filter(c=>c.method==='thread/start')).toHaveLength(1);
   expect(protocol.some(c=>c.method==='turn/start')).toBe(false);
   expect(protocol.some(c=>c.method==='thread/inject_items')).toBe(true);
@@ -248,11 +248,11 @@ test('tickets drag between columns and reopen one external Codex conversation', 
   expect((await request.post('/api/ticket-chat',{headers:{Origin:'https://other.example'},data:{ticketId:'ticket-1',action:'open'}})).status()).toBe(403);
   expect((await request.post('/api/ticket-chat',{data:{ticketId:'ticket-1',action:'send',text:'Do not run'}})).status()).toBe(400);
   fs.unlinkSync(path.resolve('e2e/.tmp/home', id+'.jsonl'));
-  fs.writeFileSync(path.resolve('e2e/.tmp/home/fail-external-launch'),'fixture');
+  fs.writeFileSync(path.resolve('e2e/.tmp', 'home', 'fail-external-launch'),'fixture');
   const runsBefore = herdrRuns().length;
   expect((await request.post('/api/ticket-chat',{data:{ticketId:'ticket-1',action:'open'}})).ok()).toBe(false);
   expect(herdrRuns()).toHaveLength(runsBefore);
-  fs.unlinkSync(path.resolve('e2e/.tmp/home/fail-external-launch'));
+  fs.unlinkSync(path.resolve('e2e/.tmp', 'home', 'fail-external-launch'));
   const recovered = await (await request.post('/api/ticket-chat',{data:{ticketId:'ticket-1',action:'open'}})).json();
   expect(recovered.conversation.sessionId).not.toBe(id);
   // The failed launch never reached the chat, so the recovered thread still gets its opening message.

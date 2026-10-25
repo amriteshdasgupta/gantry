@@ -63,7 +63,7 @@ test('full-page canvas supports dragging, connecting, model selection and saved 
   await page.getByRole('button', { name: 'Close editor' }).click();
 });
 test('coordinator follows named edges and preserves its separate chat through a correction loop', async ({ page, request }) => {
-  fs.rmSync(path.resolve('e2e/.tmp/home/workflow-runs/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'workflow-runs/ticket-1.json'), { force: true });
   const graph = {
     autoStart: true,
     entryNodeId: 'plan',
@@ -94,7 +94,7 @@ test('coordinator follows named edges and preserves its separate chat through a 
   await page.locator('article').filter({ hasText: 'Named edge routing' }).getByRole('button').first().click();
   await expect(page.getByText('Automation · complete', { exact: true })).toBeVisible();
   await request.post('/api/gantry/api/tickets/ticket-1/update', { data: { status: 'done' } });
-  fs.rmSync(path.resolve('e2e/.tmp/home/workflow-runs/ticket-1.json'), { force: true });
+  fs.rmSync(path.resolve('e2e/.tmp', 'home', 'workflow-runs/ticket-1.json'), { force: true });
 });
 
 test('exports and imports a workspace draft without saving until requested', async ({ page, request }) => {

@@ -298,7 +298,10 @@ describe('full fixture lifecycle', () => {
     await assert.rejects(app.supervisor.setArchived(primary.id, true), /main preview/);
     app.db.prepare('UPDATE previews SET paused=1, archived=1, retired=1 WHERE id=?').run(primary.id);
     await waitUntilReady(app, primary.id);
-    await until(() => {
+    await until(async () => {
+      // This fixture has no discovery timer. A tick can be skipped while the
+      // previous discovery is still running, even when services are ready.
+      await app.supervisor.tick();
       const row = app.db.prepare('SELECT paused, archived, retired FROM previews WHERE id=?').get(primary.id) as {paused:number;archived:number;retired:number};
       return !row.paused && !row.archived && !row.retired;
     });
