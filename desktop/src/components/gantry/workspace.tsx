@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SettingsLink } from "@/components/settings-link";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/client/api";
+import { openWorkspaceReview, selectedWorkspaceId } from "@/lib/client/workspace-navigation";
 import { canvasWorkflow } from "@/lib/client/workflow-graph";
 import { gantry, type ProjectView, type StatusView, type TicketView, type Workflow } from "@/lib/client/gantry";
 
@@ -130,9 +130,11 @@ export function GantryWorkspace() {
       executionNotices.current.set(item.id,key);
     }
   },[data]);
-  // A review deep link carries its workspace through the ticket association.
-  const reviewOwner = data?.tickets.find(t => t.reviewSpaceId === reviewSpace);
-  const project = data?.projects.find(p => p.id === (reviewOwner?.projectId ?? projectId)) ?? data?.projects[0];
+  const resolvedProjectId = selectedWorkspaceId(data?.projects ?? [], data?.tickets ?? [], projectId, reviewSpace);
+  // Retain the resolved owner before its ticket can complete and lose reviewSpaceId.
+  // Updating our own state here also keeps children from capturing the stale choice.
+  if (resolvedProjectId !== projectId) setProjectId(resolvedProjectId);
+  const project = data?.projects.find(p => p.id === resolvedProjectId);
   const tickets = data?.tickets.filter((t) => t.projectId === project?.id) ?? [];
   const ticketColor = useTicketColors(project?.id ?? "", tickets);
   const doneBranch = (branch: string) => tickets.some(t => t.branch === branch && t.status !== "in_progress");
@@ -159,12 +161,8 @@ export function GantryWorkspace() {
     if (!confirmGraphNavigation()) return;
     await act(async () => {
       const linked = owner ?? tickets.find(t => t.pullRequests.some(p => urls.includes(p.url)) || pulls.some(g => g.branch === t.branch && Object.values(g.pulls).some(p => urls.includes(p.url))));
-      let targetSpace = linked?.reviewSpaceId;
-      if (linked && !targetSpace) throw new Error("Ticket space is not ready. Refresh Gantry and try again.");
-      for (const url of urls) {
-        const result = await api.addToSpace(url, targetSpace);
-        targetSpace = result.space.id;
-      }
+      if (linked && !linked.reviewSpaceId) throw new Error("Ticket space is not ready. Refresh Gantry and try again.");
+      const targetSpace = await openWorkspaceReview(urls, project?.name ?? "Workspace", linked?.reviewSpaceId);
       if (targetSpace) { setReviewSpace(targetSpace); setArea("reviews"); setSelected(null); setCreating(false); }
     });
   }

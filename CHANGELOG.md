@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Open unlinked workspace PRs in an explicit review space instead of another workspace's current ticket space, and retain a deep-linked workspace after its ticket completes.
 - Guard merged-worktree cleanup against workflow activity on every ticket sharing a branch, allow idle paused/waiting workflows, and revalidate nested squash merges through cached parent PRs.
 - Show full individual workflow graphs and current stages in the desktop Graph view, limited to in-progress tickets.
 - Show OpenCode permission requests in the workflow's Allow and retry panel, persist exact provider-specific grants, and apply them on retry without changing Claude permissions. Existing logged permission failures gain the same approval panel.
