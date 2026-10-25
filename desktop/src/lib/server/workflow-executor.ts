@@ -10,7 +10,7 @@ import { drivers, findAgent, getAgent } from './agents';
 import { scopedSessionId } from './agents/session-scope';
 import { ticketContext } from './ticket-chat';
 import { conversationFor, openWorkflowConversation, readWorkflowConversation } from './ticket-conversations';
-import { nextNode, parseOutcome, finishAttempt, resetFrom, applyRoute, followEdge, logEvent, type Execution, type Attempt } from './workflow-state';
+import { nextNode, parseOutcome, finishAttempt, resetFrom, applyRoute, followEdge, logEvent, restoreAttemptLimitDecision, allowMoreAttempts, type Execution, type Attempt } from './workflow-state';
 import { readStageTranscript } from './stage-transcript';
 import { allowedTools, updateAllowedTools, importChatGrants, stageSettingsFile } from './stage-permissions';
 import { ruleFor, covers, isValidRule } from './stage-permission-rules';
@@ -69,6 +69,7 @@ const file = (id: string) => {
 export function executionFor(id: string): Execution | null {
   try {
     const run: Execution = JSON.parse(fs.readFileSync(file(id), 'utf8'));
+    restoreAttemptLimitDecision(run);
     // Upgrade permission errors from older builds into the same actionable panel,
     // without rerunning the agent just to ask for the permission again.
     const attempt = run.attempts.at(-1);
@@ -231,7 +232,7 @@ export async function controlExecution(id: string, action: string, nodeId?: stri
         run.message = 'Paused for manual work in the stage chat.';
       }
       save(run);
-      return openWorkflowConversation(work, attempt);
+      return openWorkflowConversation(work, attempt, run.graph.nodes.find((n) => n.id === attempt.nodeId)?.label || attempt.nodeId);
     }
     if (['confirm', 'retry', 'decide', 'allow', 'review-restart'].includes(action) && work.ticket.status !== 'in_progress')
       throw new Error('Move this ticket into In progress first.');
@@ -302,7 +303,9 @@ export async function controlExecution(id: string, action: string, nodeId?: stri
         const note = message.trim();
         run.replies ??= [];
         run.replies.push({ nodeId: decision.nodeId, message: `Decision: ${option.label}${note ? `. ${note}` : ''}`, at: Date.now(), source: 'choice' });
-        if (option.edgeId) {
+        if (decision.source === 'attempt-limit') {
+          allowMoreAttempts(run, option.id, `You chose “${option.label}” for ${run.graph.nodes.find((n) => n.id === decision.nodeId)?.label}.${note ? ` ${note}` : ''}`);
+        } else if (option.edgeId) {
           // Deterministic: the chosen connection is followed without asking the coordinator again.
           followEdge(run, option.edgeId, `You chose “${option.label}”.${note ? ` ${note}` : ''}`, true);
         } else {

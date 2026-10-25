@@ -40,7 +40,7 @@ export interface TicketView {
     state: string;
     message: string;
     updatedAt: number;
-    decision?: { nodeId: string; question: string; options: { id: string; label: string; edgeId?: string }[] };
+    decision?: { nodeId: string; question: string; source?: 'coordinator' | 'stage' | 'attempt-limit'; options: { id: string; label: string; edgeId?: string }[] };
     deliverables?: { repo: string; url: string; title: string }[];
   };
   conversation?: { provider: "claude" | "codex" | "opencode"; providerName: string; sessionId: string } | null;

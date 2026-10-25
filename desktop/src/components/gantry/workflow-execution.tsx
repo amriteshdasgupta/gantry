@@ -321,7 +321,7 @@ export function ExecutionControls({
       )}
       {decision && !active && (
         <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3" role="group" aria-label="Choose how to continue">
-          <p className="text-xs font-medium text-muted-foreground">{decisionNode ? `${decisionNode.label} · your call` : 'Your call'}</p>
+          <p className="text-xs font-medium text-muted-foreground">{decision.source === 'attempt-limit' ? `${decisionNode?.label ?? 'Stage'} · attempt limit reached` : decisionNode ? `${decisionNode.label} · your call` : 'Your call'}</p>
           {decision.question.length > 400 ? (
             <details className="text-sm">
               <summary className="cursor-pointer line-clamp-4 whitespace-pre-wrap">{decision.question}</summary>

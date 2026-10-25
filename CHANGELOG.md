@@ -21,11 +21,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Make workspace selection a distinct top-level sidebar section, keep workspace identity visible across every view, and scope the embedded review switcher to the selected workspace. Review deep links select their ticket's workspace.
+- Give each ticket its own herdr space with a Master tab and separate named stage-chat tabs on macOS and Linux. Reopening a chat reuses its tab; completed tickets close their space once its agents are no longer working or waiting.
 - Preview and edit a ticket's workflow, stage instructions, and execution settings directly in New ticket. Create saves the graph with the ticket and returns to the board without reopening details.
 - Ticket scopes now select one or more services from `gantry.yaml` using checkboxes in desktop and standalone dashboards, with persisted selections and service-based agent prompts. Older tickets and YAML remain readable.
 
 ### Added
 
+- Workflow attempt-limit messages offer one-click approval for 1, 3, or 5 more attempts, preserving the blocked correction route and applying the increased limit only to that ticket. Existing saved limit waits get the same controls.
 - Add `npm run desktop:restart` to rebuild, install, and relaunch the desktop app on Apple Silicon macOS.
 - Automatically build, verify, and publish a versioned GitHub release with its archive and checksum when changes land on `production`.
 - Clean merged worktrees from Done ticket cards with an explicit confirmation, live local Git validation, active-work guards, and per-checkout results. Ticket history and branches are retained.

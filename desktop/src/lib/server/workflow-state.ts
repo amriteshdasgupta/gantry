@@ -31,12 +31,14 @@ export interface DecisionOption {
   label: string;
   /** Configured connection to follow when chosen (coordinator choices). Stage choices rerun the stage with the answer. */
   edgeId?: string;
+  /** Extra stage visits explicitly authorized by a limit decision. */
+  additionalAttempts?: number;
 }
 export interface Decision {
   nodeId: string;
   question: string;
   options: DecisionOption[];
-  source: 'coordinator' | 'stage';
+  source: 'coordinator' | 'stage' | 'attempt-limit';
   at: number;
 }
 /** A pull request a stage reported back to Gantry (shown as `<repo>:<url> <title>`). */
@@ -186,6 +188,7 @@ export function finishAttempt(run: Execution, attempt: Attempt, outcome: Outcome
       run.steps[node.id] = 'failed';
       run.state = 'waiting';
       run.message = `Retry limit reached for ${target.label}. ${summary}`;
+      offerAttemptLimit(run, target.id);
     }
   } else {
     run.steps[node.id] = outcome === 'waiting' ? 'waiting' : 'failed';
@@ -220,6 +223,7 @@ export function followEdge(run: Execution, edgeId: string, reason: string, chose
     if (!chosenByUser) {
       run.state = 'waiting';
       run.message = `Visit limit reached for ${target.label}. ${reason}`;
+      offerAttemptLimit(run, target.id, edge.id);
       return;
     }
     // An explicit choice authorizes one more visit.
@@ -236,6 +240,52 @@ export function followEdge(run: Execution, edgeId: string, reason: string, chose
   run.message = reason;
   run.routes ??= [];
   run.routes.push({ edgeId, reason, at: Date.now() });
+}
+
+/** Keep the blocked route intact until the person explicitly authorizes more work. */
+function offerAttemptLimit(run: Execution, nodeId: string, edgeId?: string) {
+  const target = run.graph.nodes.find((n) => n.id === nodeId)!;
+  const visits = run.attempts.filter((a) => a.nodeId === nodeId).length;
+  run.decision = {
+    nodeId, source: 'attempt-limit', at: Date.now(),
+    question: `${target.label} has used ${visits} attempt${visits === 1 ? '' : 's'} (limit: ${target.maxAttempts ?? 3}). Allow more attempts and continue? This changes only this ticket's workflow.`,
+    options: [1, 3, 5].map((count) => ({ id: `limit-${count}`, label: count === 1 ? 'Allow 1 more attempt' : `Allow ${count} more attempts`, edgeId, additionalAttempts: count })),
+  };
+}
+
+/** Existing saved runs get the same controls without asking the coordinator to run again. */
+export function restoreAttemptLimitDecision(run: Execution) {
+  if (run.state !== 'waiting' || run.decision) return;
+  const targets = run.graph.nodes.filter((n) =>
+    (run.message.startsWith(`Visit limit reached for ${n.label}. `) || run.message.startsWith(`Retry limit reached for ${n.label}. `)) &&
+    run.attempts.filter((a) => a.nodeId === n.id).length >= (n.maxAttempts ?? 3));
+  if (targets.length !== 1) return;
+  const target = targets[0];
+  if (run.graph.edges !== undefined) {
+    const edges = run.graph.edges.filter((e) => e.source === run.routing?.nodeId && e.target === target.id);
+    if (edges.length === 1) offerAttemptLimit(run, target.id, edges[0].id);
+  } else if (run.graph.nodes.some((n) => n.retryTarget === target.id && run.steps[n.id] === 'failed')) {
+    offerAttemptLimit(run, target.id);
+  }
+}
+
+/** Called only for a persisted, explicit limit choice, never for coordinator output. */
+export function allowMoreAttempts(run: Execution, optionId: string, message: string) {
+  const decision = run.decision;
+  const option = decision?.options.find((o) => o.id === optionId);
+  if (decision?.source !== 'attempt-limit' || !option || ![1, 3, 5].includes(option.additionalAttempts ?? 0)) throw new Error('That limit choice is no longer available. Reload the graph.');
+  const target = run.graph.nodes.find((n) => n.id === decision.nodeId);
+  if (!target || run.state === 'running') throw new Error('This stage is not waiting for more attempts.');
+  const visits = run.attempts.filter((a) => a.nodeId === target.id).length;
+  target.maxAttempts = Math.max(target.maxAttempts ?? 3, visits) + option.additionalAttempts!;
+  if (option.edgeId) followEdge(run, option.edgeId, message, true);
+  else {
+    resetFrom(run, target.id);
+    run.decision = undefined;
+    run.waitKey = undefined;
+    run.state = 'running';
+    run.message = message;
+  }
 }
 
 /** Only configured paths from completed work can be taken; arbitrary node IDs never execute. */

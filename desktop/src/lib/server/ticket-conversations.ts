@@ -222,7 +222,7 @@ const KICKOFF = "Start the work described above.";
 function claudeSessionExists(id: string) {
   return claudeTranscriptPath(id) !== null;
 }
-async function launch(record: TicketConversation, work: TicketWorkspace, persist = true, claudeExtras: string[] = []) {
+async function launch(record: TicketConversation, work: TicketWorkspace, persist = true, claudeExtras: string[] = [], stageLabel?: string) {
   const opening = record.firstMessage ?? KICKOFF;
   let typeMessage: string | undefined;
   let args: string[];
@@ -240,7 +240,7 @@ async function launch(record: TicketConversation, work: TicketWorkspace, persist
   const command = `cd ${quote(record.cwd)} && ${["env", `PATH=${process.env.PATH || ""}`, ...args].map(quote).join(" ")}`;
   const target: LaunchTarget = {
     workspace: { id: work.project.id, name: work.project.name, path: work.project.workspace },
-    ticket: { id: record.ticketId, title: work.ticket.title }, sessionId: record.sessionId, cwd: record.cwd, command, typeMessage,
+    ticket: { id: record.ticketId, title: work.ticket.title }, sessionId: record.sessionId, cwd: record.cwd, command, typeMessage, stageLabel,
   };
   await openInHerdrChat(target);
   record.promptPrefilled = true;
@@ -293,20 +293,20 @@ export function publicConversation(record: TicketConversation | null) {
 }
 
 /** Open an existing stage session without replacing the ticket's original chat association. */
-export async function openWorkflowConversation(work: TicketWorkspace, attempt: {sessionId?:string;providerKind:string;providerId:string;model:string}) {
+export async function openWorkflowConversation(work: TicketWorkspace, attempt: {sessionId?:string;providerKind:string;providerId:string;model:string}, stageLabel = "Stage") {
   if (!attempt.sessionId || !/^[\w-]+$/.test(attempt.sessionId) || !['codex','claude','opencode'].includes(attempt.providerKind)) throw httpError(409, 'Read this API stage in its history panel.');
   const cwd=work.checkouts[0]?.path;
   if (!cwd) throw httpError(409,'This ticket has no worktrees.');
   const record:TicketConversation={ticketId:work.ticket.id,agentId:attempt.providerId,provider:attempt.providerKind as CliKind,providerName:attempt.providerKind,model:attempt.model,sessionId:attempt.sessionId,cwd,branch:work.ticket.branch,checkouts:work.checkouts,context:'Continue the existing Gantry stage. Preserve its instructions and finish with its structured GANTRY_RESULT handover.',promptPrefilled:true,createdAt:Date.now()};
   if(record.provider==='claude' && !claudeSessionExists(record.sessionId)) throw httpError(409,'This stage conversation is no longer available. Its output remains in stage history.');
-  if(record.provider!=='claude') { await launch(record,work,false); return {conversation:publicConversation(record)}; }
+  if(record.provider!=='claude') { await launch(record,work,false,[],stageLabel); return {conversation:publicConversation(record)}; }
   // A Claude chat gets the same tools and MCP servers the headless stage has, so both behave alike.
   const { allowedTools, stageSettingsFile } = await import('./stage-permissions');
   const { stageMcpConfig } = await import('./stage-mcp');
   const allow = allowedTools(work.project.id);
   const mcp = await stageMcpConfig(work.ticket.id, work.checkouts.map(c => c.path));
   const settings = stageSettingsFile(work.project.workspace);
-  await launch(record,work,false,[...(allow.length ? ['--allowedTools', allow.join(',')] : []), ...(mcp ? ['--mcp-config', mcp] : []), ...(settings ? ['--settings', settings] : [])]);
+  await launch(record,work,false,[...(allow.length ? ['--allowedTools', allow.join(',')] : []), ...(mcp ? ['--mcp-config', mcp] : []), ...(settings ? ['--settings', settings] : [])],stageLabel);
   return {conversation:publicConversation(record)};
 }
 

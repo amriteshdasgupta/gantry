@@ -23,7 +23,7 @@ test('graph tickets open one master chat that sees the graph and can drive it', 
   const run = {
     ticketId: 'ticket-1', projectId: 'fixture', graph, state: 'paused', message: 'Paused by you.',
     steps: { plan: 'done', build: 'pending' }, defaultProviderId: 'claude', updatedAt: 1,
-    attempts: [{ id: 'a1', nodeId: 'plan', startedAt: 1, endedAt: 2, state: 'done', summary: 'Planned the master chat fixture', output: 'x'.repeat(5000), providerId: 'claude', providerKind: 'claude', model: '', commits: {} }],
+    attempts: [{ id: 'a1', nodeId: 'plan', startedAt: 1, endedAt: 2, state: 'done', summary: 'Planned the master chat fixture', output: 'x'.repeat(5000), providerId: 'codex', providerKind: 'codex', sessionId: 'stage-plan-fixture', model: '', commits: {} }],
   };
   fs.mkdirSync(path.dirname(runFile), { recursive: true });
   fs.writeFileSync(runFile, JSON.stringify(run));
@@ -55,6 +55,22 @@ test('graph tickets open one master chat that sees the graph and can drive it', 
 
   const again = await (await request.post('/api/ticket-chat', { data: { ticketId: 'ticket-1', action: 'open' } })).json();
   expect(again.conversation.sessionId).toBe(body.conversation.sessionId);
+  const layout = () => JSON.parse(fs.readFileSync(path.join(home, 'terminal-launcher-state.json'), 'utf8')).herdr.tickets['ticket-1'];
+  const beforeStage = layout();
+  expect(beforeStage.layout).toBe('ticket-space');
+  const openStage = () => request.post('/api/workflow-execution', { data: { ticketId: 'ticket-1', action: 'open', nodeId: 'plan' } });
+  expect((await openStage()).ok()).toBe(true);
+  const afterStage = layout();
+  expect(afterStage.workspaceId).toBe(beforeStage.workspaceId);
+  const fake = JSON.parse(fs.readFileSync(path.join(home, 'fake-herdr.json'), 'utf8'));
+  const masterPane = fake.panes[afterStage.panes[body.conversation.sessionId]];
+  const stagePane = fake.panes[afterStage.panes['stage-plan-fixture']];
+  expect(masterPane.tab_id).toBe(afterStage.tabId);
+  expect(stagePane.tab_id).not.toBe(masterPane.tab_id);
+  expect(fake.tabs[masterPane.tab_id].label).toBe('Master');
+  expect(fake.tabs[stagePane.tab_id]).toMatchObject({ label: 'Plan', workspace_id: afterStage.workspaceId });
+  expect((await openStage()).ok()).toBe(true);
+  expect(layout().panes['stage-plan-fixture']).toBe(stagePane.pane_id);
   await request.patch('/api/agents', { data: { id: previous.current, current: true } });
 });
 

@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { workflowSchema } from '../packages/shared/src/workflow';
 import { canvasWorkflow } from '../desktop/src/lib/client/workflow-graph';
-import { applyRoute, finishAttempt, nextNode, type Attempt, type Execution } from '../desktop/src/lib/server/workflow-state';
+import { allowMoreAttempts, restoreAttemptLimitDecision, applyRoute, finishAttempt, nextNode, type Attempt, type Execution } from '../desktop/src/lib/server/workflow-state';
 const graph = () => ({
   entryNodeId: 'plan',
   edges: [
@@ -83,6 +83,62 @@ test('cycles have bounded visits rather than infinite model calls', () => {
   applyRoute(r, choose('review-build'));
   expect(r.state).toBe('waiting');
   expect(r.message).toContain('Visit limit');
+  expect(r.decision?.source).toBe('attempt-limit');
+});
+test.each([1, 3, 5])('explicit approval adds %i visits and follows the blocked correction route', (extra) => {
+  const r = run();
+  r.graph.nodes[1].maxAttempts = 1;
+  finish(r, 'build');
+  finish(r, 'review', 'changes_requested');
+  applyRoute(r, choose('review-build'));
+  const saved: Execution = JSON.parse(JSON.stringify(r));
+  allowMoreAttempts(saved, `limit-${extra}`, 'Fix the two review findings');
+  expect(saved.graph.nodes[1].maxAttempts).toBe(1 + extra);
+  expect(saved.state).toBe('running');
+  expect(nextNode(saved)?.id).toBe('build');
+  expect(saved.steps.review).toBe('pending');
+  expect(saved.routing).toBeUndefined();
+  expect(saved.decision).toBeUndefined();
+  expect(saved.attempts.at(-1)?.summary).toBe('Evidence');
+  expect(saved.routes?.at(-1)).toMatchObject({ edgeId: 'review-build', reason: 'Fix the two review findings' });
+  expect(() => allowMoreAttempts(saved, `limit-${extra}`, 'Again')).toThrow('no longer available');
+  for (let i = 0; i < extra; i++) {
+    finish(saved, 'build');
+    finish(saved, 'review', 'changes_requested');
+    applyRoute(saved, choose('review-build'));
+  }
+  expect(saved.state).toBe('waiting');
+  expect(saved.decision?.source).toBe('attempt-limit');
+});
+test('old visit-limit runs gain actionable controls without rerunning the coordinator', () => {
+  const r = run();
+  r.graph.nodes[1].maxAttempts = 1;
+  finish(r, 'build');
+  finish(r, 'review', 'changes_requested');
+  applyRoute(r, choose('review-build'));
+  delete r.decision;
+  restoreAttemptLimitDecision(r);
+  expect(r.decision?.options.map((o) => o.additionalAttempts)).toEqual([1, 3, 5]);
+  expect(r.state).toBe('waiting');
+  expect(() => allowMoreAttempts(r, 'limit-999', 'Invalid')).toThrow();
+  expect(r.graph.nodes[1].maxAttempts).toBe(1);
+});
+test('legacy retry-limit runs also allow extra attempts explicitly', () => {
+  const r = run();
+  delete r.graph.edges;
+  r.graph.nodes[1].maxAttempts = 1;
+  r.graph.nodes[2].dependsOn = ['build'];
+  r.graph.nodes[2].retryTarget = 'build';
+  finish(r, 'build');
+  finish(r, 'review', 'changes_requested');
+  expect(r.decision?.source).toBe('attempt-limit');
+  delete r.decision;
+  restoreAttemptLimitDecision(r);
+  allowMoreAttempts(r, 'limit-3', 'Continue');
+  expect(r.graph.nodes[1].maxAttempts).toBe(4);
+  expect(r.steps.build).toBe('pending');
+  expect(r.steps.review).toBe('pending');
+  expect(r.state).toBe('running');
 });
 test('canvas migration preserves instructions and expresses previous joins and corrections as edges', () => {
   const legacy = {

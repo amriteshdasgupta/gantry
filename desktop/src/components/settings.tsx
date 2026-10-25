@@ -169,8 +169,8 @@ function ChatLauncher() {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold tracking-tight">Chats open in herdr</h2>
         <p className="text-sm text-muted-foreground">
-          Every chat opens in herdr: one space per workspace, one tab per ticket, and stage chats as panes beside the ticket chat.
-          The tab closes once the ticket is Done and no agent in it is working. The terminal app shows herdr&apos;s window when none is open.
+          Every ticket gets its own herdr space, with a Master chat tab and a separate tab for each stage chat you open.
+          The space closes once the ticket is Done and no agent in it is working or waiting for you. The terminal app shows herdr&apos;s window when none is open.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">

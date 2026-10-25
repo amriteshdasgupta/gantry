@@ -46,7 +46,18 @@ if (kind === 'workspace' && action === 'create') {
   // The agent reports itself once its CLI starts, as herdr's integrations do.
   state.panes[target].agent = 'fixture';
   out({});
+} else if (kind === 'tab' && action === 'rename') {
+  state.tabs[target].label = args[3];
+  out({});
+} else if (action === 'close') {
+  const tabs = kind === 'workspace' ? Object.keys(state.tabs).filter((t) => state.tabs[t].workspace_id === target) : [target];
+  for (const t of tabs) {
+    for (const p of Object.keys(state.panes)) if (state.panes[p].tab_id === t) delete state.panes[p];
+    delete state.tabs[t];
+  }
+  for (const w of Object.keys(state.workspaces)) if (!Object.values(state.tabs).some((t) => t.workspace_id === w)) delete state.workspaces[w];
+  out({});
 } else {
-  // rename, focus, close, send-text, send-keys: nothing to model.
+  // focus, send-text, send-keys: nothing to model.
   out({});
 }

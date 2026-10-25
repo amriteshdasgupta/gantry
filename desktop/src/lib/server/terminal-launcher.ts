@@ -10,7 +10,7 @@ import { sessionOpenInTerminal } from "./stage-sessions";
 
 /**
  * Every interactive chat (a ticket's chat, its master chat, a stage's chat) opens in herdr:
- * one herdr workspace per Gantry workspace, one tab per ticket, one pane per conversation.
+ * one herdr space per ticket, with a Master tab and one tab per stage conversation.
  * Herdr is required. The terminal app setting only says which app shows herdr's window.
  */
 const exec = promisify(execFile);
@@ -32,10 +32,12 @@ export interface LaunchTarget {
   sessionId: string;
   cwd: string;
   command: string;
+  /** Omitted for the ticket's Master chat. */
+  stageLabel?: string;
   /** Typed into the chat once its agent is up, for CLIs that cannot take an opening message as an argument. */
   typeMessage?: string;
 }
-interface HerdrTicket { workspaceId: string; tabId: string; panes: Record<string, string> }
+interface HerdrTicket { workspaceId: string; tabId: string; panes: Record<string, string>; layout?: "ticket-space" }
 interface State {
   herdr: { spaces: Record<string, { workspaceId: string; homeTabId: string }>; tickets: Record<string, HerdrTicket> };
 }
@@ -202,56 +204,68 @@ async function typeWhenReady(bin: string, pane: string, message: string) {
 async function openInHerdr(settings: LauncherSettings, target: LaunchTarget) {
   const bin = settings.herdrPath;
   const state = loadState();
-  let space = state.herdr.spaces[target.workspace.id];
-  if (!space || !(await exists(bin, "workspace", space.workspaceId))) {
-    // herdr closes a workspace with its last tab, so its first tab stays as the workspace's home.
-    const made = await herdr(bin, "workspace", "create", "--cwd", target.workspace.path, "--label", target.workspace.name, "--no-focus");
-    space = { workspaceId: made.workspace.workspace_id, homeTabId: made.tab.tab_id };
-    await herdr(bin, "tab", "rename", space.homeTabId, "Gantry");
-    state.herdr.spaces[target.workspace.id] = space;
-  }
   let ticket: HerdrTicket | undefined = state.herdr.tickets[target.ticket.id];
-  if (ticket && (ticket.workspaceId !== space.workspaceId || !(await exists(bin, "tab", ticket.tabId)))) ticket = undefined;
+  if (ticket && ticket.layout !== "ticket-space") {
+    // Old releases shared a workspace. Never close a chat that still has a live writer.
+    for (const session of Object.keys(ticket.panes)) {
+      if (await sessionOpenInTerminal(session)) throw httpError(409, "Exit this ticket's existing herdr chats, then reopen to move them into its own space.");
+    }
+    if (await exists(bin, "tab", ticket.tabId)) await herdr(bin, "tab", "close", ticket.tabId);
+    ticket = undefined;
+  }
+  if (ticket && !(await exists(bin, "workspace", ticket.workspaceId))) ticket = undefined;
+  if (!ticket) {
+    const made = await herdr(bin, "workspace", "create", "--cwd", target.cwd, "--label", `${target.workspace.name} · ${target.ticket.title}`.slice(0, 120), "--no-focus");
+    ticket = { workspaceId: made.workspace.workspace_id, tabId: made.tab.tab_id, panes: {}, layout: "ticket-space" };
+    state.herdr.tickets[target.ticket.id] = ticket;
+    saveState(state);
+  }
+  if (!(await exists(bin, "tab", ticket.tabId))) {
+    const made = await herdr(bin, "tab", "create", "--workspace", ticket.workspaceId, "--cwd", target.cwd, "--label", "Master", "--no-focus");
+    ticket.tabId = made.tab.tab_id;
+  }
+  await herdr(bin, "tab", "rename", ticket.tabId, "Master");
+  const panes = (await herdr(bin, "pane", "list", "--workspace", ticket.workspaceId)).panes as Json[];
   let pane = ticket?.panes[target.sessionId];
   let run = true;
-  let live = pane ? await herdr(bin, "pane", "get", pane).then((r) => r.pane as Json, () => null) : null;
-  if (ticket && live?.tab_id !== ticket.tabId) {
+  let live = panes.find((p) => p.pane_id === pane);
+  if (!live) {
     // herdr records each agent pane's session, so a chat is found even when its pane id was forgotten.
-    const panes = (await herdr(bin, "pane", "list", "--workspace", ticket.workspaceId)).panes as Json[];
-    live = panes.find((p) => p.tab_id === ticket!.tabId && p.agent_session?.value === target.sessionId) ?? null;
+    live = panes.find((p) => p.agent_session?.value === target.sessionId);
     if (live) pane = live.pane_id as string;
   }
-  if (live && live.tab_id === ticket?.tabId) {
+  let tabId = live?.tab_id as string | undefined;
+  if (live) {
     // Reuse the chat's pane, and restart it only when its agent has exited.
     // herdr's agent field comes from hooks and can drop while the agent still runs, so check the process.
     run = !(await sessionOpenInTerminal(target.sessionId));
-  } else if (!ticket) {
-    const made = await herdr(bin, "tab", "create", "--workspace", space.workspaceId, "--cwd", target.cwd, "--label", target.ticket.title.slice(0, 60), "--no-focus");
-    ticket = { workspaceId: space.workspaceId, tabId: made.tab.tab_id, panes: {} };
-    pane = made.root_pane.pane_id as string;
+  } else if (!target.stageLabel) {
+    tabId = ticket.tabId;
+    pane = panes.find((p) => p.tab_id === tabId)!.pane_id as string;
   } else {
-    // Split the tab's newest pane, alternating direction so panes stay usable.
-    const panes = ((await herdr(bin, "pane", "list", "--workspace", ticket.workspaceId)).panes as Json[]).filter((p) => p.tab_id === ticket!.tabId);
-    const made = await herdr(bin, "pane", "split", panes.at(-1)!.pane_id, "--direction", panes.length % 2 ? "right" : "down", "--cwd", target.cwd, "--no-focus");
-    pane = made.pane.pane_id as string;
+    const made = await herdr(bin, "tab", "create", "--workspace", ticket.workspaceId, "--cwd", target.cwd, "--label", target.stageLabel.slice(0, 60), "--no-focus");
+    tabId = made.tab.tab_id;
+    pane = made.root_pane.pane_id as string;
   }
   ticket!.panes[target.sessionId] = pane!;
   state.herdr.tickets[target.ticket.id] = ticket!;
   saveState(state);
   if (run) await herdr(bin, "pane", "run", pane!, launchScript(target));
   // The chat is running; failing to focus it or show herdr must not fail the open.
-  await herdr(bin, "workspace", "focus", space.workspaceId).then(() => herdr(bin, "tab", "focus", ticket!.tabId)).catch(() => {});
+  await herdr(bin, "workspace", "focus", ticket.workspaceId).then(() => herdr(bin, "tab", "focus", tabId!)).catch(() => {});
   await showHerdr(settings).catch(() => {});
   if (run && target.typeMessage) await typeWhenReady(bin, pane!, target.typeMessage);
 }
 
-/** Closes a done ticket's tab once none of its panes has an agent working or waiting on the person. */
+/** Closes a done ticket's space once none of its chats is working or waiting on the person. */
 async function closeInHerdr(bin: string, state: State, ticketId: string) {
   const ticket = state.herdr.tickets[ticketId];
-  if (await exists(bin, "tab", ticket.tabId)) {
+  const kind = ticket.layout === "ticket-space" ? "workspace" : "tab";
+  const id = kind === "workspace" ? ticket.workspaceId : ticket.tabId;
+  if (await exists(bin, kind, id)) {
     const panes = (await herdr(bin, "pane", "list", "--workspace", ticket.workspaceId)).panes as Json[];
-    if (panes.some((p) => p.tab_id === ticket.tabId && p.agent && ["working", "blocked"].includes(p.agent_status))) return;
-    await herdr(bin, "tab", "close", ticket.tabId);
+    if (panes.some((p) => (kind === "workspace" || p.tab_id === ticket.tabId) && p.agent && ["working", "blocked"].includes(p.agent_status))) return;
+    await herdr(bin, kind, "close", id);
   }
   delete state.herdr.tickets[ticketId];
 }
@@ -271,7 +285,7 @@ export async function openInHerdrChat(target: LaunchTarget): Promise<void> {
   }
 }
 
-/** Closes the tabs of tickets that are now Done. Called from the executor's tick with every ticket's status. */
+/** Closes the spaces of tickets that are now Done. Called from the executor's tick with every ticket's status. */
 export async function closeDoneTickets(statusOf: (ticketId: string) => string | undefined) {
   const state = loadState();
   if (!Object.keys(state.herdr.tickets).some((id) => statusOf(id) === "done")) return;
