@@ -11,7 +11,7 @@ interface Props {
   spaces: Space[];
   current: Space;
   onSwitch: (id: string) => void;
-  onCreate: () => void;
+  onCreate?: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
 }
@@ -110,17 +110,19 @@ export function SpaceSwitcher({ spaces, current, onSwitch, onCreate, onRename, o
               )}
             </div>
           ))}
-          <div className="my-1 h-px bg-border" />
-          <button
-            role="menuitem"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-            onClick={() => {
-              setOpen(false);
-              onCreate();
-            }}
-          >
-            <PlusIcon className="size-3.5" /> New space
-          </button>
+          {onCreate && <>
+            <div className="my-1 h-px bg-border" />
+            <button
+              role="menuitem"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+              onClick={() => {
+                setOpen(false);
+                onCreate();
+              }}
+            >
+              <PlusIcon className="size-3.5" /> New space
+            </button>
+          </>}
         </div>
       )}
     </div>

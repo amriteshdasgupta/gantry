@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Make workspace selection a distinct top-level sidebar section, keep workspace identity visible across every view, and scope the embedded review switcher to the selected workspace. Review deep links select their ticket's workspace.
 - Preview and edit a ticket's workflow, stage instructions, and execution settings directly in New ticket. Create saves the graph with the ticket and returns to the board without reopening details.
 - Ticket scopes now select one or more services from `gantry.yaml` using checkboxes in desktop and standalone dashboards, with persisted selections and service-based agent prompts. Older tickets and YAML remain readable.
 
