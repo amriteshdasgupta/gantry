@@ -65,6 +65,84 @@ test('Gantry ticket, preview and review workflow stays inside Gantry', async ({ 
   fs.rmSync(path.resolve('e2e/.tmp', 'home', 'ticket-conversations/ticket-1.json'),{force:true});
 });
 
+test('workspace hierarchy keeps reviews, previews and deep links in their owning context', async ({ page, request }) => {
+  const base = await (await request.get(`${runtimeUrl}/api/status`)).json();
+  const originalSpaces = await (await request.get('/api/spaces')).json();
+  const makeTicket = (id: string, projectId: string, title: string) => ({
+    id, projectId, title, description: '', status: 'in_progress', branch: `ticket/${id}`,
+    pullRequests: [], artifacts: [], run: null,
+  });
+  const status = {
+    ...base,
+    projects: [base.projects[0], { ...base.projects[0], id: 'other', name: 'Other workspace', workspace: '/fixture/other' }],
+    tickets: [makeTicket('context-one', 'fixture', 'First workspace work'), makeTicket('context-two', 'other', 'Second workspace work')],
+    previews: [],
+    pulls: [],
+  };
+  const workspaces = page.getByRole('navigation', { name: 'Workspaces', exact: true });
+  const context = page.getByLabel('Current workspace', { exact: true });
+
+  try {
+    await request.post(`${runtimeUrl}/__fixture`, { data: { status } });
+    await page.goto('/?workspace=fixture');
+    await expect(context).toHaveText('Fixture workspace/Tickets');
+    await expect(workspaces.locator('[aria-current="true"]')).toContainText('Fixture workspace');
+    const firstNavigation = page.getByRole('region', { name: 'Fixture workspace navigation', exact: true });
+    await expect(firstNavigation).toContainText('/fixture/workspace');
+    await expect(firstNavigation.getByRole('navigation', { name: 'Previews', exact: true })).toContainText('First workspace work');
+    await expect(firstNavigation).not.toContainText('Second workspace work');
+
+    await page.getByRole('button', { name: 'Open review space for First workspace work', exact: true }).click();
+    await expect(context).toHaveText('Fixture workspace/Reviews');
+    const firstUrl = page.url();
+    await page.getByRole('button', { name: 'Switch space', exact: true }).click();
+    await expect(page.getByRole('menu')).toContainText('First workspace work');
+    await expect(page.getByRole('menu')).not.toContainText('Second workspace work');
+    await expect(page.getByRole('menuitem', { name: 'New space', exact: true })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    await workspaces.getByRole('button', { name: 'Other workspace' }).click();
+    await expect(context).toHaveText('Other workspace/Tickets');
+    await expect(page).not.toHaveURL(/review=/);
+    await expect(page.getByRole('region', { name: 'Ticket board' })).toContainText('Second workspace work');
+    await expect(page.getByRole('region', { name: 'Ticket board' })).not.toContainText('First workspace work');
+    const previews = page.getByRole('navigation', { name: 'Previews', exact: true });
+    await previews.getByRole('button', { name: 'Second workspace work', exact: true }).click();
+    await expect(context).toHaveText('Other workspace/Previews');
+    await expect(previews.getByRole('button', { name: 'Second workspace work', exact: true })).toHaveAttribute('aria-current', 'page');
+
+    // The review association overrides a stale workspace parameter and saved choice.
+    const deepLink = new URL(firstUrl);
+    deepLink.searchParams.set('workspace', 'other');
+    await page.goto(deepLink.toString());
+    await expect(context).toHaveText('Fixture workspace/Reviews');
+    await expect(page).toHaveURL(/workspace=fixture/);
+    await expect(workspaces.locator('[aria-current="true"]')).toContainText('Fixture workspace');
+    await page.getByRole('navigation', { name: 'Gantry workspace', exact: true }).getByRole('button', { name: /Tickets/ }).click();
+    await expect(context).toHaveText('Fixture workspace/Tickets');
+
+    await workspaces.getByRole('button', { name: 'Other workspace' }).click();
+    await expect(previews.getByRole('button', { name: 'Second workspace work', exact: true })).not.toHaveAttribute('aria-current', 'page');
+    await previews.getByRole('button', { name: 'Main', exact: true }).click();
+    await expect(previews.getByRole('button', { name: 'Main', exact: true })).toHaveAttribute('aria-current', 'page');
+    await page.reload();
+    await expect(context).toHaveText('Other workspace/Tickets');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(context).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    await request.post(`${runtimeUrl}/__fixture`, { data: { status: null } });
+    await page.goto('/reviews');
+    const current = await (await request.get('/api/spaces')).json();
+    for (const space of current.spaces) {
+      if (!originalSpaces.spaces.some((s: { id: string }) => s.id === space.id)) {
+        await request.delete(`/api/spaces?id=${space.id}`);
+      }
+    }
+    await request.patch('/api/spaces', { data: { id: originalSpaces.current, makeCurrent: true } });
+  }
+});
+
 test('Gantry proxy rejects cross-origin mutations and unsupported routes', async ({ request }) => {
   const crossOrigin = await request.post('/api/gantry/api/projects', {headers:{Origin:'https://untrusted.example'},data:{workspace:'/tmp'}});
   expect(crossOrigin.status()).toBe(403);

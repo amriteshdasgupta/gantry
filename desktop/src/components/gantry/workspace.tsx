@@ -2,7 +2,7 @@
 
 import { ticketServiceScopes } from "@/lib/client/gantry";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
-import { ArrowUpRightIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, Trash2Icon } from "lucide-react";
+import { ArrowUpRightIcon, CheckIcon, FolderIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SettingsLink } from "@/components/settings-link";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/client/api";
+import { createWorkspaceReviewNavigation, selectedWorkspaceId } from "@/lib/client/workspace-navigation";
 import { canvasWorkflow } from "@/lib/client/workflow-graph";
 import { gantry, type ProjectView, type StatusView, type TicketView, type Workflow } from "@/lib/client/gantry";
 
@@ -49,6 +49,7 @@ function TicketPreview({owner,onChat,onTicketReview,...props}:Omit<ComponentProp
 export function GantryWorkspace() {
   useGraphNavigationGuard();
   const [reviewSpace, setReviewSpace] = useState<string | null>(null);
+  const [reviewNavigation] = useState(createWorkspaceReviewNavigation);
   const [data, setData] = useState<StatusView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
@@ -98,8 +99,12 @@ export function GantryWorkspace() {
     });
     const onMerge = () => { void refresh(); };
     window.addEventListener("gantry:merge-completed", onMerge);
-    return () => { mounted.current = false; window.removeEventListener("gantry:merge-completed", onMerge); };
-  }, [refresh]);
+    return () => {
+      mounted.current = false;
+      reviewNavigation.invalidate();
+      window.removeEventListener("gantry:merge-completed", onMerge);
+    };
+  }, [refresh, reviewNavigation]);
   useEffect(() => {
     const update = () => { if (!document.hidden) void refresh(); };
     const timer = setInterval(update, area === "tickets" && ticketView === "graph" ? 2000 : 10000);
@@ -112,15 +117,33 @@ export function GantryWorkspace() {
       const execution=item.execution;
       if(!execution)continue;
       const key=execution.state+execution.message;
-       const openGraph={label:'Open graph',onClick:()=>{if (!confirmGraphNavigation()) return; setProjectId(item.projectId);setSelected(item.id);setTicketTab('details');}};
+      const openGraph = {
+        label: 'Open graph',
+        onClick: () => {
+          if (!confirmGraphNavigation()) return;
+          reviewNavigation.invalidate();
+          setReviewSpace(null);
+          setArea('tickets');
+          setProjectId(item.projectId);
+          setSelected(item.id);
+          setTicketTab('details');
+        },
+      };
       const seen=executionNotices.current.has(item.id);
       if(executionNotices.current.get(item.id)!==key && execution.state==='waiting') toast.error(execution.decision?`${item.title} needs your choice`:`${item.title} needs attention`,{description:execution.decision?`${execution.decision.question}\n${execution.decision.options.map(o=>`• ${o.label}`).join('\n')}`:execution.message,action:openGraph});
       // Announce a finished run once, leading with what it delivered.
       if(seen && executionNotices.current.get(item.id)!==key && execution.state==='complete') toast.success(`${item.title} is ready for review`,{description:execution.deliverables?.length?execution.deliverables.map(d=>`${d.repo}:${d.url} ${d.title}`).join('\n'):execution.message,action:openGraph});
       executionNotices.current.set(item.id,key);
     }
-  },[data]);
-  const project = data?.projects.find((p) => p.id === projectId) ?? data?.projects[0];
+  },[data, reviewNavigation]);
+  const resolvedProjectId = selectedWorkspaceId(data?.projects ?? [], data?.tickets ?? [], projectId, reviewSpace);
+  // Retain the resolved owner before its ticket can complete and lose reviewSpaceId.
+  // Updating our own state here also keeps children from capturing the stale choice.
+  if (resolvedProjectId !== projectId) {
+    reviewNavigation.invalidate();
+    setProjectId(resolvedProjectId);
+  }
+  const project = data?.projects.find(p => p.id === resolvedProjectId);
   const tickets = data?.tickets.filter((t) => t.projectId === project?.id) ?? [];
   const ticketColor = useTicketColors(project?.id ?? "", tickets);
   const doneBranch = (branch: string) => tickets.some(t => t.branch === branch && t.status !== "in_progress");
@@ -147,12 +170,8 @@ export function GantryWorkspace() {
     if (!confirmGraphNavigation()) return;
     await act(async () => {
       const linked = owner ?? tickets.find(t => t.pullRequests.some(p => urls.includes(p.url)) || pulls.some(g => g.branch === t.branch && Object.values(g.pulls).some(p => urls.includes(p.url))));
-      let targetSpace = linked?.reviewSpaceId;
-      if (linked && !targetSpace) throw new Error("Ticket space is not ready. Refresh Gantry and try again.");
-      for (const url of urls) {
-        const result = await api.addToSpace(url, targetSpace);
-        targetSpace = result.space.id;
-      }
+      if (linked && !linked.reviewSpaceId) throw new Error("Ticket space is not ready. Refresh Gantry and try again.");
+      const targetSpace = await reviewNavigation.open(urls, project?.name ?? "Workspace", linked?.reviewSpaceId);
       if (targetSpace) { setReviewSpace(targetSpace); setArea("reviews"); setSelected(null); setCreating(false); }
     });
   }
@@ -165,6 +184,7 @@ export function GantryWorkspace() {
   }
   function openTicket(id: string, preview = false, edit = false) {
     if (!confirmGraphNavigation()) return;
+    reviewNavigation.invalidate();
     setEditingTicket(edit);
     setSelected(id); setCreating(false); setLog(null);
     setTicketTab(preview ? "preview" : "details");
@@ -172,6 +192,7 @@ export function GantryWorkspace() {
   function closeTicket() {
     if (creating && busy) return;
     if (!confirmGraphNavigation()) return;
+    reviewNavigation.invalidate();
     setSelected(null); setCreating(false); setLog(null); setEditingTicket(false);
     const params = new URLSearchParams(window.location.search); params.delete("ticket");
     window.history.replaceState(null, "", `/?${params}`);
@@ -198,6 +219,7 @@ export function GantryWorkspace() {
   const activeProjectId = project?.id;
   useEffect(() => {
     if (!activeProjectId) return;
+    localStorage.setItem("gantry-workspace", activeProjectId);
     const params = new URLSearchParams(window.location.search);
     params.set("workspace", activeProjectId);
     if(area === "workflow") params.set("view","workflow"); else params.delete("view");
@@ -206,8 +228,20 @@ export function GantryWorkspace() {
     params.delete("ticket");
     window.history.replaceState(null, "", `/?${params}`);
   }, [area, reviewSpace, activeProjectId]);
-  const navigateReview = useCallback((id: string | null) => { if (!confirmGraphNavigation()) return; setReviewSpace(id); setArea(current => id ? "reviews" : current === "reviews" ? "tickets" : current); }, []);
-  const changeArea = (next: Area) => { if (next !== area && !confirmGraphNavigation()) return; setArea(next); setLog(null); setCreating(false); };
+  const navigateReview = useCallback((id: string | null) => {
+    if (!confirmGraphNavigation()) return;
+    reviewNavigation.invalidate();
+    if (activeProjectId) setProjectId(activeProjectId);
+    setReviewSpace(id);
+    setArea(current => id ? "reviews" : current === "reviews" ? "tickets" : current);
+  }, [activeProjectId, reviewNavigation]);
+  const changeArea = (next: Area) => {
+    if (next !== area && !confirmGraphNavigation()) return;
+    reviewNavigation.invalidate();
+    setArea(next);
+    setLog(null);
+    setCreating(false);
+  };
 
   const ticketCards = new Map(tickets.map(t => [t.id, <article key={t.id} style={ticketColor(t.id)} data-ticket-id={t.id} data-done={t.status === "done" || undefined} draggable={ticketView === "board" && !busy && !movingTickets.has(t.id)} onDragStart={e => { e.dataTransfer.setData("application/x-gantry-ticket", t.id); e.dataTransfer.effectAllowed = "move"; setDragging(t.id); }} onDragEnd={() => { setDragging(null); setDropColumn(null); }} className={cn("gantry-ticket rounded-lg border", selected === t.id && "gantry-ticket-selected", dragging === t.id && "opacity-50")}>
                   <button onClick={() => openTicket(t.id)} className="flex w-full flex-col gap-3 p-3 text-left focus-visible:outline-2 focus-visible:outline-ring" aria-pressed={selected === t.id}>
@@ -232,32 +266,119 @@ export function GantryWorkspace() {
       <SettingsLink /><ThemeToggle />
     </header>
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-      <aside className="flex max-h-[35dvh] overflow-y-auto md:max-h-none shrink-0 flex-col gap-5 border-b bg-muted/20 p-4 md:w-56 md:border-r md:border-b-0">
-        <nav aria-label="Workspaces" className="space-y-1"><h2 className="mb-2 px-2 text-xs font-medium text-muted-foreground">Workspaces</h2>
+      <aside className="flex max-h-[40dvh] shrink-0 flex-col overflow-y-auto border-b bg-muted/20 md:max-h-none md:w-64 md:border-r md:border-b-0">
+        <nav aria-label="Workspaces" className="space-y-2 border-b p-3">
+          <div className="flex items-center justify-between px-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Workspaces</h2>
+            <Button variant="ghost" size="icon-sm" aria-label="Add workspace" onClick={() => setAdding(true)}><PlusIcon /></Button>
+          </div>
           {!data?.projects.length && <p className="px-2 text-sm text-muted-foreground">No workspace connected</p>}
-          {data?.projects.map((p) => { const active = data.tickets.filter((t) => t.projectId === p.id && t.status === "in_progress").length; return <Button key={p.id} variant={project?.id === p.id ? "secondary" : "ghost"} className="h-auto min-h-8 w-full justify-start text-left" aria-current={project?.id === p.id ? "true" : undefined} title={p.workspace} onClick={() => { if (project?.id === p.id || !confirmGraphNavigation()) return; setReviewSpace(null); setArea("tickets"); setProjectId(p.id); localStorage.setItem("gantry-workspace", p.id); setSelected(null); setCreating(false); setLog(null); }}><span className="min-w-0 flex-1 whitespace-normal break-words">{p.name}</span>{active > 0 && <span className="pl-2 text-xs tabular-nums text-muted-foreground" aria-label={`${active} in progress`}>{active}</span>}</Button>; })}
+          {data?.projects.map(p => {
+            const current = project?.id === p.id;
+            const active = data.tickets.filter(t => t.projectId === p.id && t.status === "in_progress").length;
+
+            return <Button
+              key={p.id}
+              variant="ghost"
+              className={cn("h-auto min-h-12 w-full justify-start border border-transparent px-3 py-2 text-left", current && "border-violet-300 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-950")}
+              aria-current={current ? "true" : undefined}
+              title={p.workspace}
+              onClick={() => {
+                if (current || !confirmGraphNavigation()) return;
+                reviewNavigation.invalidate();
+                setReviewSpace(null);
+                setArea("tickets");
+                setProjectId(p.id);
+                setSelected(null);
+                setPreviewTicket("main");
+                setTicketTab("details");
+                setEditingTicket(false);
+                setCreating(false);
+                setLog(null);
+              }}
+            >
+              <FolderIcon className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1 whitespace-normal break-words font-semibold">{p.name}</span>
+              {active > 0 && <span className="text-xs tabular-nums" aria-label={`${active} in progress`}>{active}</span>}
+              {current && <CheckIcon aria-hidden="true" className="size-4 shrink-0" />}
+            </Button>;
+          })}
         </nav>
-        <nav aria-label="Gantry workspace" className="flex gap-1 md:flex-col">
-          {([["tickets", "Tickets", LayoutListIcon, tickets.filter(t => t.status === "in_progress").length, "ticket in progress", "tickets in progress"], ["reviews", "Reviews", GitPullRequestIcon, pulls.length, "open pull request group awaiting review", "open pull request groups awaiting review"]] as const).map(([id, label, Icon, count, one, many]) =>
-            <Button key={id} variant={area === id ? "secondary" : "ghost"} className={cn("justify-start", area === id && (id === "tickets" ? "gantry-nav-tickets" : "gantry-nav-reviews"))} aria-current={area === id ? "page" : undefined} onClick={() => changeArea(id)}><Icon />{label}<Tooltip><TooltipTrigger render={<span />} className="ml-auto pl-3 text-xs tabular-nums text-muted-foreground" aria-label={`${count} ${count === 1 ? one : many}`}>{count}</TooltipTrigger><TooltipContent side="right">{count} {count === 1 ? one : many}</TooltipContent></Tooltip></Button>)}
-        </nav>
-        {project && <nav aria-label="Previews" className="space-y-1"><h2 className="mb-2 flex items-center gap-2 px-2 text-xs font-semibold text-muted-foreground"><MonitorIcon className="size-4" />Previews</h2>{previewEntries.map(entry => <Button key={entry.id} variant={area === "previews" && activePreview.id === entry.id ? "secondary" : "ghost"} className={cn("h-auto min-h-8 w-full justify-start pl-6 text-left", area === "previews" && activePreview.id === entry.id && "gantry-nav-reviews")} aria-current={area === "previews" && activePreview.id === entry.id ? "page" : undefined} onClick={() => { if (!confirmGraphNavigation()) return; setPreviewTicket(entry.id); changeArea("previews"); closeTicket(); }}><span className="min-w-0 whitespace-normal break-words">{entry.name}</span></Button>)}</nav>}
-        <div className="mt-auto space-y-3">
-          {project && <Button variant={area === "workflow" ? "secondary" : "ghost"} size="sm" className="w-full justify-start" aria-current={area === "workflow" ? "page" : undefined} onClick={() => changeArea("workflow")}><GitBranchIcon />Workspace graph</Button>}
-          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setAdding(true)}><PlusIcon /> Add workspace</Button>
-          {project && <p className="break-all text-xs leading-relaxed text-muted-foreground">{project.workspace}</p>}
-        </div>
+        {project && <section aria-label={`${project.name} navigation`} className="flex flex-1 flex-col gap-4 p-3">
+          <div className="min-w-0 px-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">In this workspace</p>
+            <h2 className="mt-1 break-words text-sm font-semibold">{project.name}</h2>
+            <p className="mt-1 break-all text-xs text-muted-foreground">{project.workspace}</p>
+          </div>
+          <div className="space-y-4 border-l pl-2">
+            <nav aria-label="Gantry workspace" className="flex gap-1 md:flex-col">
+              {([
+                ["tickets", "Tickets", LayoutListIcon, tickets.filter(t => t.status === "in_progress").length, "ticket in progress", "tickets in progress"],
+                ["reviews", "Reviews", GitPullRequestIcon, pulls.length, "open pull request group awaiting review", "open pull request groups awaiting review"],
+              ] as const).map(([id, label, Icon, count, one, many]) => <Button
+                key={id}
+                variant={area === id ? "secondary" : "ghost"}
+                className={cn("justify-start", area === id && (id === "tickets" ? "gantry-nav-tickets" : "gantry-nav-reviews"))}
+                aria-current={area === id ? "page" : undefined}
+                onClick={() => changeArea(id)}
+              >
+                <Icon />{label}
+                <Tooltip>
+                  <TooltipTrigger render={<span />} className="ml-auto pl-3 text-xs tabular-nums text-muted-foreground" aria-label={`${count} ${count === 1 ? one : many}`}>{count}</TooltipTrigger>
+                  <TooltipContent side="right">{count} {count === 1 ? one : many}</TooltipContent>
+                </Tooltip>
+              </Button>)}
+            </nav>
+            <nav aria-label="Previews" className="space-y-1">
+              <h2 className="mb-2 flex items-center gap-2 px-2 text-xs font-semibold text-muted-foreground"><MonitorIcon className="size-4" />Previews</h2>
+              {previewEntries.map(entry => <Button
+                key={entry.id}
+                variant={area === "previews" && activePreview.id === entry.id ? "secondary" : "ghost"}
+                className={cn("h-auto min-h-8 w-full justify-start pl-6 text-left", area === "previews" && activePreview.id === entry.id && "gantry-nav-reviews")}
+                aria-current={area === "previews" && activePreview.id === entry.id ? "page" : undefined}
+                onClick={() => {
+                  if (!confirmGraphNavigation()) return;
+                  setPreviewTicket(entry.id);
+                  changeArea("previews");
+                  closeTicket();
+                }}
+              >
+                <span className="min-w-0 whitespace-normal break-words">{entry.name}</span>
+              </Button>)}
+            </nav>
+          </div>
+          <div className="border-t pt-3">
+            <Button variant={area === "workflow" ? "secondary" : "ghost"} size="sm" className="w-full justify-start" aria-current={area === "workflow" ? "page" : undefined} onClick={() => changeArea("workflow")}><GitBranchIcon />Workspace graph</Button>
+          </div>
+        </section>}
       </aside>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
+        {project && <div aria-label="Current workspace" className="flex shrink-0 items-center gap-2 border-b bg-muted/20 px-6 py-3 text-sm">
+          <FolderIcon aria-hidden="true" className="size-4 shrink-0 text-violet-600 dark:text-violet-300" />
+          <span className="min-w-0 break-words font-semibold">{project.name}</span>
+          <span aria-hidden="true" className="text-muted-foreground">/</span>
+          <span className="shrink-0 text-muted-foreground">{area === "tickets" ? "Tickets" : area === "reviews" ? "Reviews" : area === "previews" ? "Previews" : "Workspace graph"}</span>
+        </div>}
         {area === "workflow" && project && <WorkspaceGraphPage key={project.id} project={project}/>}
         {area !== "workflow" && area !== "previews" && !(area === "reviews" && reviewSpace) && <div className="flex flex-wrap items-center gap-3 border-b px-6 py-5">
           <div className="min-w-0 flex-1"><h1 className="text-xl font-semibold">{area === "tickets" ? "Tickets" : "Ready for review"}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{area === "tickets" ? "Create a worktree, build the feature, and open a pull request." : "Review related pull requests together."}</p></div>
           {area === "tickets" && <div role="group" aria-label="Ticket view" className="flex rounded-lg border p-1">
-            {(["board", "graph"] as const).map(view => <Button key={view} size="sm" variant={ticketView === view ? "secondary" : "ghost"} aria-pressed={ticketView === view} onClick={() => { setTicketView(view); localStorage.setItem("gantry-ticket-view", view); }}>{view === "board" ? <LayoutListIcon /> : <NetworkIcon />}{view === "board" ? "Board" : "Graph"}</Button>)}
+            {(["board", "graph"] as const).map(view => <Button key={view} size="sm" variant={ticketView === view ? "secondary" : "ghost"} aria-pressed={ticketView === view} onClick={() => {
+              reviewNavigation.invalidate();
+              setTicketView(view);
+              localStorage.setItem("gantry-ticket-view", view);
+            }}>{view === "board" ? <LayoutListIcon /> : <NetworkIcon />}{view === "board" ? "Board" : "Graph"}</Button>)}
           </div>}
           <Button variant="outline" disabled={busy} onClick={() => void refresh()} aria-label="Refresh Gantry"><RefreshCwIcon /></Button>
-          {area === "tickets" && project && <Button disabled={busy} onClick={() => { if (!confirmGraphNavigation()) return; setCreating(true); setSelected(null); setLog(null); setTicketTab("details"); }}><PlusIcon /> New ticket</Button>}
+          {area === "tickets" && project && <Button disabled={busy} onClick={() => {
+            if (!confirmGraphNavigation()) return;
+            reviewNavigation.invalidate();
+            setCreating(true);
+            setSelected(null);
+            setLog(null);
+            setTicketTab("details");
+          }}><PlusIcon /> New ticket</Button>}
           {area === "reviews" && project && <Button variant="outline" disabled={busy} onClick={() => void act(() => gantry.refreshProject(project.id), "Remote sync queued")}><RefreshCwIcon /> Sync remote</Button>}
         </div>}
         {error && <div role="alert" className="border-b bg-destructive/5 px-6 py-3 text-sm text-destructive">{error} {data && "Showing the last loaded state."}</div>}
@@ -315,7 +436,7 @@ export function GantryWorkspace() {
         </section>)}{!ticketPreviews.length && <p className="p-6 text-sm text-muted-foreground">No preview for this ticket yet. Create its worktrees from Details or start work in Chat.</p>}</section>}
           </div></TicketDialog>}
         </div>}
-        {project && reviewSpace && <div className={area === "reviews" ? "flex min-h-0 flex-1 flex-col" : "hidden"}><ReviewWorkspace key={reviewSpace} spaceId={reviewSpace} initialTarget={null} initialFile={null} onNavigateSpace={navigateReview} /></div>}
+        {project && reviewSpace && <div className={area === "reviews" ? "flex min-h-0 flex-1 flex-col" : "hidden"}><ReviewWorkspace key={reviewSpace} projectId={project.id} spaceId={reviewSpace} initialTarget={null} initialFile={null} onNavigateSpace={navigateReview} /></div>}
         {project && area === "reviews" && !reviewSpace && <div className="divide-y">{pulls.map((g) => <section key={g.id} className="space-y-4 p-6"><div className="flex flex-wrap items-center gap-3"><GitBranchIcon className="size-4 text-muted-foreground" /><h2 className="min-w-0 flex-1 break-all font-medium">{g.branch}</h2><State value={g.ready ? "ready" : "blocked"} /><Button size="sm" disabled={busy} onClick={() => void review(Object.values(g.pulls).map((p) => p.url))}>Review {Object.keys(g.pulls).length > 1 ? "together" : "PR"}<ArrowUpRightIcon /></Button></div>
           {Object.entries(g.pulls).map(([repo, p]) => <div key={repo} className="flex flex-wrap items-center gap-3 text-sm"><GitPullRequestIcon className="size-4 shrink-0 text-muted-foreground" /><button className="min-w-0 flex-1 break-words text-left hover:underline" disabled={busy} onClick={() => void review([p.url])}>{repo} #{p.number} · {p.title}</button><a href={p.url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground underline underline-offset-4">GitHub</a></div>)}{g.blockers.length > 0 && <p className="text-xs text-muted-foreground">{g.blockers.join(" · ")}</p>}
         </section>)}{!pulls.length && <p className="p-6 text-sm text-muted-foreground">No open pull requests. Sync remote to check for new reviews.</p>}</div>}

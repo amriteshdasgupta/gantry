@@ -19,13 +19,14 @@ import { SpaceSwitcher } from "./space-switcher";
 import { PrStateIcon } from "@/components/pr-state";
 
 interface Props {
+  projectId?: string;
   onNavigateSpace?: (id: string | null) => void;
   spaceId: string;
   initialTarget: string | null;
   initialFile: string | null;
 }
 
-export function Workspace({ spaceId, initialTarget, initialFile, onNavigateSpace }: Props) {
+export function Workspace({ spaceId, initialTarget, initialFile, onNavigateSpace, projectId }: Props) {
   const router = useRouter();
   const [data, setData] = useState<SpacesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -215,7 +216,7 @@ export function Workspace({ spaceId, initialTarget, initialFile, onNavigateSpace
     try {
       const res = await api.deleteSpace(id);
       setData(res);
-      if (id === spaceId) { if (onNavigateSpace) onNavigateSpace(res.current); else router.push(spaceHref(res.current)); }
+      if (id === spaceId) { if (onNavigateSpace) onNavigateSpace(null); else router.push(spaceHref(res.current)); }
     } catch (err) {
       toast.error((err as Error).message);
     }
@@ -250,7 +251,14 @@ export function Workspace({ spaceId, initialTarget, initialFile, onNavigateSpace
     <div className="flex h-full min-h-0 flex-col">
       <header className={cn("flex h-12 shrink-0 items-center gap-2 border-b px-3", !onNavigateSpace && "app-bar")}>
         {!onNavigateSpace && <BackToTickets projectId={space.gantry?.projectId} ticketId={space.gantry?.ticketId} />}
-        <SpaceSwitcher spaces={data.spaces} current={space} onSwitch={switchTo} onCreate={create} onRename={rename} onDelete={remove} />
+        <SpaceSwitcher
+          spaces={projectId ? data.spaces.filter(s => s.gantry?.projectId === projectId || s.id === spaceId) : data.spaces}
+          current={space}
+          onSwitch={switchTo}
+          onCreate={projectId ? undefined : create}
+          onRename={rename}
+          onDelete={remove}
+        />
         <nav role="tablist" aria-label="Outputs in this space" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {tabs.map((t) => {
             const a = activity[t];

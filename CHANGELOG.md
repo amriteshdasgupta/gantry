@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Prevent a pending review response from overriding a newer workspace, view, or ticket selection. The review is saved without reopening over the user's latest navigation.
+- Open unlinked workspace PRs in an explicit review space instead of another workspace's current ticket space, and retain a deep-linked workspace after its ticket completes.
 - Guard merged-worktree cleanup against workflow activity on every ticket sharing a branch, allow idle paused/waiting workflows, and revalidate nested squash merges through cached parent PRs.
 - Show full individual workflow graphs and current stages in the desktop Graph view, limited to in-progress tickets.
 - Show OpenCode permission requests in the workflow's Allow and retry panel, persist exact provider-specific grants, and apply them on retry without changing Claude permissions. Existing logged permission failures gain the same approval panel.
@@ -18,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Make workspace selection a distinct top-level sidebar section, keep workspace identity visible across every view, and scope the embedded review switcher to the selected workspace. Review deep links select their ticket's workspace.
 - Preview and edit a ticket's workflow, stage instructions, and execution settings directly in New ticket. Create saves the graph with the ticket and returns to the board without reopening details.
 - Ticket scopes now select one or more services from `gantry.yaml` using checkboxes in desktop and standalone dashboards, with persisted selections and service-based agent prompts. Older tickets and YAML remain readable.
 
