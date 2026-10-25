@@ -13,7 +13,7 @@ test('a saved visit-limit wait offers direct approval and resumes its correction
   };
   await request.post('/api/gantry/api/projects/fixture/tickets', { data: { title: 'Attempt limit fixture' } });
   await request.post('/api/gantry/api/tickets/ticket-1/update', { data: { status: 'in_progress' } });
-  const file = path.resolve('e2e/.tmp/home/workflow-runs/ticket-1.json');
+  const file = path.join(path.resolve('e2e/.tmp/home'), 'workflow-runs', 'ticket-1.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({
     ticketId: 'ticket-1', projectId: 'fixture', graph, state: 'waiting', defaultProviderId: 'codex', updatedAt: 1,
