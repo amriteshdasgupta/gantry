@@ -17,7 +17,7 @@
     "@gantry/shared": "*",
     "fastify": "^5.0.0",
     "yaml": "^2.6.0",
-    "zod": "^3.24.0",
+    "zod": "^4.6.7",
     "cross-spawn": "7.0.6"
   },
   "devDependencies": {
