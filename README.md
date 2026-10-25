@@ -116,7 +116,22 @@ npm run desktop:build
 
 You'll find the app in `desktop/dist/`. On Apple Silicon Macs, open `desktop/dist/mac-arm64/Gantry.app`.
 
-For a Windows installer, then run:
+**Linux (AppImage).** Build a self-contained AppImage — it bundles Chromium + Node, so it runs on any glibc 2.28+ distro (Arch, Debian, Ubuntu, RHEL8) with nothing else installed:
+
+```sh
+npm run app:build:linux --prefix desktop
+```
+
+The result is `desktop/dist/Gantry-<version>-x86_64.AppImage`. To launch it as `gantry` from the terminal:
+
+```sh
+install -Dm755 desktop/dist/Gantry-*-x86_64.AppImage ~/.local/opt/Gantry.AppImage
+printf '#!/bin/sh\nexec "$HOME/.local/opt/Gantry.AppImage" "$@"\n' > ~/.local/bin/gantry
+chmod +x ~/.local/bin/gantry
+gantry   # opens the desktop app (ensure ~/.local/bin is on your PATH)
+```
+
+For a Windows installer, run:
 
 ```sh
 npm run app:build:win --prefix desktop
