@@ -86,7 +86,7 @@
       "target": "AppImage",
       "category": "Development",
       "icon": "electron/icon.png",
-      "artifactName": "Gantry-${version}-x86_64.${ext}"
+      "artifactName": "Gantry-x86_64.${ext}"
     }
   }
 }

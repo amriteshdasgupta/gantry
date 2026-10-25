@@ -122,13 +122,28 @@ You'll find the app in `desktop/dist/`. On Apple Silicon Macs, open `desktop/dis
 npm run app:build:linux --prefix desktop
 ```
 
-The result is `desktop/dist/Gantry-<version>-x86_64.AppImage`. To launch it as `gantry` from the terminal:
+The result is `desktop/dist/Gantry-x86_64.AppImage`. To launch it as `gantry` from the terminal (ensure `~/.local/bin` is on your PATH):
 
 ```sh
-install -Dm755 desktop/dist/Gantry-*-x86_64.AppImage ~/.local/opt/Gantry.AppImage
-printf '#!/bin/sh\nexec "$HOME/.local/opt/Gantry.AppImage" "$@"\n' > ~/.local/bin/gantry
+install -Dm755 desktop/dist/Gantry-x86_64.AppImage ~/.local/opt/Gantry.AppImage
+cat > ~/.local/bin/gantry <<'EOF'
+#!/bin/sh
+APP="$HOME/.local/opt/Gantry.AppImage"
+if [ "$1" = "update" ]; then
+  echo "Updating Gantry…"
+  curl -fL "https://github.com/amriteshdasgupta/gantry/releases/latest/download/Gantry-x86_64.AppImage" -o "$APP.tmp" \
+    && chmod +x "$APP.tmp" && mv "$APP.tmp" "$APP" && echo "Updated." || { echo "Update failed."; rm -f "$APP.tmp"; exit 1; }
+  exit 0
+fi
+if command -v fusermount >/dev/null 2>&1 || command -v fusermount3 >/dev/null 2>&1; then
+  exec "$APP" "$@"
+else
+  exec "$APP" --appimage-extract-and-run "$@"   # no FUSE present
+fi
+EOF
 chmod +x ~/.local/bin/gantry
-gantry   # opens the desktop app (ensure ~/.local/bin is on your PATH)
+gantry          # opens the desktop app
+gantry update   # pulls the latest release in place
 ```
 
 For a Windows installer, run:
