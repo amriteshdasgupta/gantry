@@ -2,7 +2,7 @@
 
 import { ticketServiceScopes } from "@/lib/client/gantry";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
-import { ArrowUpRightIcon, FolderOpenIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, Trash2Icon } from "lucide-react";
+import { ArrowUpRightIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import { Workspace as ReviewWorkspace } from "@/components/space/workspace";
 import { PreviewPane } from "./preview-pane";
 import { GraphStatus, TicketWorkflow, graphSummary } from "./workflow";
 import { SetupCheck } from "./setup-check";
+import { AddWorkspaceDialog } from "./add-workspace-dialog";
 import { DeleteTicketDialog } from "./delete-ticket-dialog";
 import { CleanupWorktreesDialog } from "./cleanup-worktrees-dialog";
 import { TicketDialog } from "./ticket-dialog";
@@ -62,7 +63,6 @@ export function GantryWorkspace() {
   const [creating, setCreating] = useState(false);
   const [editingTicket, setEditingTicket] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [workspace, setWorkspace] = useState("");
   const [busy, setBusy] = useState(false);
   const pendingMoves = useRef(new Set<string>());
   const [movingTickets, setMovingTickets] = useState<Set<string>>(new Set());
@@ -223,6 +223,7 @@ export function GantryWorkspace() {
 
   return <div className="gantry-workspace flex h-full min-h-0 flex-col bg-background">
     {cleaning && <CleanupWorktreesDialog ticketId={cleaning.id} title={cleaning.title} onClose={() => setCleaning(null)} onCleaned={refresh} />}
+    {adding && <AddWorkspaceDialog busy={busy} onCancel={() => setAdding(false)} onConnect={dir => void act(() => gantry.addProject(dir), "Workspace connected").then(ok => { if (ok) setAdding(false); })} />}
     {deleting && <DeleteTicketDialog title={deleting.title} busy={busy} onCancel={() => setDeleting(null)} onDelete={() => void act(() => gantry.deleteTicket(deleting.id), "Ticket deleted").then(ok => { if (ok) { if (selected === deleting.id) closeTicket(); setDeleting(null); } })} />}
     <header className="app-bar flex h-12 shrink-0 items-center gap-3 border-b px-4">
       <span className="flex items-center gap-2 text-sm font-semibold"><LayoutListIcon className="size-5 text-violet-600 dark:text-violet-300" />Gantry</span>
@@ -242,16 +243,11 @@ export function GantryWorkspace() {
         {project && <nav aria-label="Previews" className="space-y-1"><h2 className="mb-2 flex items-center gap-2 px-2 text-xs font-semibold text-muted-foreground"><MonitorIcon className="size-4" />Previews</h2>{previewEntries.map(entry => <Button key={entry.id} variant={area === "previews" && activePreview.id === entry.id ? "secondary" : "ghost"} className={cn("h-auto min-h-8 w-full justify-start pl-6 text-left", area === "previews" && activePreview.id === entry.id && "gantry-nav-reviews")} aria-current={area === "previews" && activePreview.id === entry.id ? "page" : undefined} onClick={() => { if (!confirmGraphNavigation()) return; setPreviewTicket(entry.id); changeArea("previews"); closeTicket(); }}><span className="min-w-0 whitespace-normal break-words">{entry.name}</span></Button>)}</nav>}
         <div className="mt-auto space-y-3">
           {project && <Button variant={area === "workflow" ? "secondary" : "ghost"} size="sm" className="w-full justify-start" aria-current={area === "workflow" ? "page" : undefined} onClick={() => changeArea("workflow")}><GitBranchIcon />Workspace graph</Button>}
-          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setAdding(!adding)}><PlusIcon /> Add workspace</Button>
+          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setAdding(true)}><PlusIcon /> Add workspace</Button>
           {project && <p className="break-all text-xs leading-relaxed text-muted-foreground">{project.workspace}</p>}
         </div>
       </aside>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
-        {adding && <form className="flex flex-wrap items-end gap-3 border-b p-6" onSubmit={(e) => { e.preventDefault(); void act(() => gantry.addProject(workspace.trim()), "Workspace connected").then((ok) => { if (ok) { setAdding(false); setWorkspace(""); } }); }}>
-          <label className="min-w-64 flex-1 space-y-2 text-sm">Workspace folder<Input value={workspace} onChange={(e) => setWorkspace(e.target.value)} placeholder="/path/to/repository or workspace" required autoFocus /></label>
-          {typeof window !== "undefined" && "gantryDesktop" in window && <Button type="button" variant="outline" onClick={() => void (window as unknown as { gantryDesktop: { pickFolder(): Promise<string | null> } }).gantryDesktop.pickFolder().then(dir => { if (dir) setWorkspace(dir); })}><FolderOpenIcon /> Browse…</Button>}
-          <Button type="submit" disabled={busy || !workspace.trim()}>Connect workspace</Button><Button type="button" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
-        </form>}
         {area === "workflow" && project && <WorkspaceGraphPage key={project.id} project={project}/>}
         {area !== "workflow" && area !== "previews" && !(area === "reviews" && reviewSpace) && <div className="flex flex-wrap items-center gap-3 border-b px-6 py-5">
           <div className="min-w-0 flex-1"><h1 className="text-xl font-semibold">{area === "tickets" ? "Tickets" : "Ready for review"}</h1>
