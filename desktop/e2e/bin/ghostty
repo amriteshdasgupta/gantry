@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const home = process.env.PR_LENS_HOME;
+fs.appendFileSync(path.join(home, 'external-launches.jsonl'), JSON.stringify({command:path.basename(process.argv[1]),args:process.argv.slice(2)})+'\n');
+if (fs.existsSync(path.join(home, 'fail-external-launch'))) process.exit(1);

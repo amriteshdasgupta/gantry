@@ -2,7 +2,7 @@ import "server-only";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { HOME, withLock } from "./exec";
 import { httpError } from "./http";
@@ -20,10 +20,9 @@ const SCRIPTS = path.join(HOME, "launch-scripts");
 export const DEFAULT_HERDR = process.env.PR_LENS_HERDR || path.join(os.homedir(), ".local", "bin", "herdr");
 const GHOSTTY = process.env.PR_LENS_GHOSTTY || "/Applications/Ghostty.app";
 
-export type TerminalApp = "ghostty" | "terminal";
 export interface LauncherSettings {
-  /** The app that shows herdr's window when none is open. */
-  terminalApp: TerminalApp;
+  /** The id of the terminal app that shows herdr's window when none is open. */
+  terminalApp: string;
   herdrPath: string;
 }
 /** Where one conversation should open: its Gantry workspace, its ticket, and the command that starts the chat. */
@@ -41,22 +40,74 @@ interface State {
   herdr: { spaces: Record<string, { workspaceId: string; homeTabId: string }>; tickets: Record<string, HerdrTicket> };
 }
 
-const blank = (): LauncherSettings => ({ terminalApp: fs.existsSync(GHOSTTY) ? "ghostty" : "terminal", herdrPath: DEFAULT_HERDR });
-export function launcherSettings(): LauncherSettings {
-  const base = blank();
-  try {
-    const saved = JSON.parse(fs.readFileSync(SETTINGS, "utf8")) as Partial<LauncherSettings>;
-    return { terminalApp: saved.terminalApp ?? base.terminalApp, herdrPath: saved.herdrPath || base.herdrPath };
-  } catch { return base; }
+/** A terminal app that can show herdr's window: whether it is installed, and how to open a window running a program. */
+interface Terminal { id: string; label: string; installed: () => boolean; open: (program: string, cwd: string) => Promise<void> }
+
+const onPath = (bin: string) => (process.env.PATH ?? "").split(path.delimiter).some((dir) => dir && fs.existsSync(path.join(dir, bin)));
+/** A terminal started as `bin ...args(program)`, which returns once the process has started. */
+const cli = (id: string, label: string, bin: string, args: (program: string) => string[]): Terminal => ({
+  id, label, installed: () => onPath(bin),
+  open: (program, cwd) => new Promise((resolve, reject) => {
+    const child = spawn(bin, args(program), { cwd, detached: true, stdio: "ignore" });
+    child.once("error", reject).once("spawn", () => { child.unref(); resolve(); });
+  }),
+});
+/** A macOS app driven by AppleScript, which gets the program and its directory as data, never as script text. */
+const appleScript = (id: string, label: string, installed: () => boolean, script: string): Terminal => ({
+  id, label, installed,
+  open: async (program, cwd) => void await exec("osascript", ["-e", script, quote(program), cwd], { timeout: 15000 }),
+});
+
+const TERMINALS: Partial<Record<NodeJS.Platform, Terminal[]>> = {
+  darwin: [
+    appleScript("ghostty", "Ghostty", () => fs.existsSync(GHOSTTY), `on run argv
+      tell application "Ghostty"
+        set cfg to new surface configuration
+        set command of cfg to item 1 of argv
+        set initial working directory of cfg to item 2 of argv
+        new window with configuration cfg
+        activate
+      end tell
+    end run`),
+    appleScript("terminal", "Terminal", () => true, `on run argv
+      tell application "Terminal"
+        do script item 1 of argv
+        activate
+      end tell
+    end run`),
+  ],
+  linux: [
+    cli("ghostty", "Ghostty", "ghostty", (p) => ["-e", p]),
+    cli("kitty", "kitty", "kitty", (p) => [p]),
+    cli("alacritty", "Alacritty", "alacritty", (p) => ["-e", p]),
+    cli("wezterm", "WezTerm", "wezterm", (p) => ["start", "--", p]),
+    cli("gnome-terminal", "GNOME Terminal", "gnome-terminal", (p) => ["--", p]),
+    cli("konsole", "Konsole", "konsole", (p) => ["-e", p]),
+    cli("xfce4-terminal", "Xfce Terminal", "xfce4-terminal", (p) => ["-x", p]),
+    cli("xterm", "xterm", "xterm", (p) => ["-e", p]),
+  ],
+};
+/** The terminal apps installed on this machine, in order of preference. */
+export const installedTerminals = () => (TERMINALS[process.platform] ?? []).filter((t) => t.installed());
+
+export function launcherSettings(): LauncherSettings & { available: { id: string; label: string }[] } {
+  const installed = installedTerminals();
+  const available = installed.map(({ id, label }) => ({ id, label }));
+  let saved: Partial<LauncherSettings> = {};
+  try { saved = JSON.parse(fs.readFileSync(SETTINGS, "utf8")); } catch { /* defaults */ }
+  // A saved app that has since been uninstalled falls back to the first one installed.
+  const terminalApp = installed.some((t) => t.id === saved.terminalApp) ? saved.terminalApp! : installed[0]?.id ?? "";
+  return { terminalApp, herdrPath: saved.herdrPath || DEFAULT_HERDR, available };
 }
-export function saveLauncherSettings(input: Partial<LauncherSettings>): LauncherSettings {
-  const next = { ...launcherSettings(), ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) } as LauncherSettings;
-  if (!["ghostty", "terminal"].includes(next.terminalApp)) throw httpError(400, "Choose Ghostty or Terminal.");
+export function saveLauncherSettings(input: Partial<LauncherSettings>) {
+  const { available, ...current } = launcherSettings();
+  const next = { ...current, ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) } as LauncherSettings;
+  if (!available.some((t) => t.id === next.terminalApp)) throw httpError(400, "Choose a terminal app installed on this computer.");
   next.herdrPath = String(next.herdrPath || DEFAULT_HERDR).trim();
   if (!path.isAbsolute(next.herdrPath)) throw httpError(400, "Give herdr's full path, like ~/.local/bin/herdr expanded.");
   fs.writeFileSync(`${SETTINGS}.tmp`, JSON.stringify(next, null, 1), { mode: 0o600 });
   fs.renameSync(`${SETTINGS}.tmp`, SETTINGS);
-  return next;
+  return launcherSettings();
 }
 
 /** Whether herdr runs at the configured path, with its version for the setup check. */
@@ -109,6 +160,7 @@ async function herdrHosts() {
   const hosts: string[] = [];
   for (const [pid, p] of procs) {
     if (path.basename(p.comm) !== "herdr" || servers.has(pid)) continue;
+    if (process.platform !== "darwin") { hosts.push("herdr"); continue; }
     for (let at = p.ppid, hops = 0; at > 1 && hops < 20; at = procs.get(at)?.ppid ?? 0, hops++) {
       const app = procs.get(at)?.comm.match(/^(.*?\.app)\/Contents\/MacOS\//)?.[1];
       if (app) { hosts.push(app); break; }
@@ -117,33 +169,17 @@ async function herdrHosts() {
   return hosts;
 }
 
-/** Opens a new window running a shell command in Ghostty or Terminal. */
-async function openTerminalApp(app: TerminalApp, command: string, cwd: string) {
-  // Arguments enter AppleScript as data, never as script text.
-  const script = app === "ghostty" ? `on run argv
-    tell application "Ghostty"
-      set cfg to new surface configuration
-      set command of cfg to item 1 of argv
-      set initial working directory of cfg to item 2 of argv
-      new window with configuration cfg
-      activate
-    end tell
-  end run` : `on run argv
-    tell application "Terminal"
-      do script item 1 of argv
-      activate
-    end tell
-  end run`;
-  await exec("osascript", ["-e", script, command, cwd], { timeout: 15000 });
-}
-
 /** Brings the herdr window to the front, or opens one in the chosen terminal app when none is attached. */
 async function showHerdr(settings: LauncherSettings) {
-  // Elsewhere herdr's own window is the person's to open; the chat is already waiting in its tab.
-  if (process.platform !== "darwin") return;
   const [host] = await herdrHosts();
-  if (host) return void await exec("open", ["-a", host], { timeout: 5000 });
-  await openTerminalApp(settings.terminalApp, quote(settings.herdrPath), os.homedir());
+  if (host) {
+    // ponytail: no portable way to raise another app's window off macOS, so an attached client is left as is.
+    if (process.platform === "darwin") await exec("open", ["-a", host], { timeout: 5000 });
+    return;
+  }
+  const terminal = installedTerminals().find((t) => t.id === settings.terminalApp);
+  if (!terminal) throw new Error("No terminal app found. Install one, then choose it in Settings.");
+  await terminal.open(settings.herdrPath, os.homedir());
   // Wait for the client to attach so the next chat does not open a second herdr window.
   for (let i = 0; i < 20 && !(await herdrHosts()).length; i++) await new Promise((r) => setTimeout(r, 250));
 }
