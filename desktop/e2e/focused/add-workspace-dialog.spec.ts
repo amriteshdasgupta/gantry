@@ -22,7 +22,7 @@ test('Add workspace opens as a modal that dims and blocks the rest of the app', 
   const dialog = page.getByRole('dialog', { name: 'Add workspace' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel('Workspace folder')).toBeFocused();
-  expect(await dialog.evaluate(d => getComputedStyle(d, '::backdrop').backgroundColor)).toBe('oklab(0 0 0 / 0.4)');
+  expect(await dialog.evaluate(d => getComputedStyle(d, '::backdrop').backgroundColor)).toBe('oklab(0 0 0 / 0.5)');
 
   // The rest of the app sits behind the backdrop and cannot be reached.
   const refresh = page.getByRole('button', { name: 'Refresh Gantry' });

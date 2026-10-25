@@ -13,7 +13,7 @@ export function AddWorkspaceDialog({ busy, onCancel, onConnect }: { busy: boolea
     dialog.showModal();
     return () => { dialog.close(); previous?.focus(); };
   }, []);
-  return <dialog ref={ref} aria-labelledby="add-workspace-title" onCancel={e => { e.preventDefault(); if (!busy) onCancel(); }} className="fixed inset-0 m-auto max-h-[85dvh] w-[min(36rem,calc(100vw-32px))] overflow-auto rounded-xl border bg-background p-6 text-foreground shadow-xl backdrop:bg-black/40">
+  return <dialog ref={ref} aria-labelledby="add-workspace-title" onCancel={e => { e.preventDefault(); if (!busy) onCancel(); }} className="fixed inset-0 m-auto max-h-[85dvh] w-[min(36rem,calc(100vw-32px))] overflow-auto rounded-xl border bg-popover p-6 text-popover-foreground shadow-xl backdrop:bg-black/50">
     <form onSubmit={e => { e.preventDefault(); onConnect(workspace.trim()); }}>
       <h2 id="add-workspace-title" className="text-lg font-semibold">Add workspace</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Choose a Git repository or a folder of repositories.</p>
