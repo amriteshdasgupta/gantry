@@ -145,11 +145,6 @@ export function Settings() {
   );
 }
 
-const TERMINAL_APPS: { app: TerminalLauncher["terminalApp"]; label: string }[] = [
-  { app: "ghostty", label: "Ghostty" },
-  { app: "terminal", label: "Terminal" },
-];
-
 /** Where ticket, master and stage chats open. */
 function ChatLauncher() {
   const [settings, setSettings] = useState<TerminalLauncher | null>(null);
@@ -180,11 +175,12 @@ function ChatLauncher() {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Show herdr in</span>
-        {TERMINAL_APPS.map((t) => (
-          <Button key={t.app} size="sm" variant={settings.terminalApp === t.app ? "secondary" : "ghost"} onClick={() => setSettings({ ...settings, terminalApp: t.app })}>
+        {settings.available.map((t) => (
+          <Button key={t.id} size="sm" variant={settings.terminalApp === t.id ? "secondary" : "ghost"} onClick={() => setSettings({ ...settings, terminalApp: t.id })}>
             {t.label}
           </Button>
         ))}
+        {!settings.available.length && <span className="text-xs text-muted-foreground">No supported terminal app found.</span>}
       </div>
       <Field label="herdr binary">
         <Input value={settings.herdrPath} onChange={(e) => setSettings({ ...settings, herdrPath: e.target.value })} />
