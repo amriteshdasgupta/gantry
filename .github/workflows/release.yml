@@ -1,26 +1,59 @@
-name: release
+name: Release
+
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag to create (e.g. v0.1.0)'
-        required: true
+  push:
+    branches: [production]
+
 permissions:
   contents: write
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
 jobs:
-  linux:
+  release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 22
+          cache: npm
+      - name: Check release version
+        id: version
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const { version } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Expected a stable MAJOR.MINOR.PATCH version');
+          const tag = `v${version}`;
+          if (execFileSync('git', ['tag', '--list', tag], { encoding: 'utf8' }).trim()) {
+            throw new Error(`${tag} already exists; bump the version before merging into production`);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          NODE
       - run: npm ci
-      # Builds packages/ui/dist, which the desktop bundle stages into the app.
-      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run release:pack
+      - run: npm run release:verify
       - run: npm run desktop:setup
       - run: npm --prefix desktop run app:build:linux
-      - run: gh release create "$TAG" desktop/dist/*.AppImage install.sh --target "$GITHUB_REF_NAME" --generate-notes
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v${RELEASE_VERSION}" \
+            desktop/dist/*.AppImage install.sh \
+            "dist/gantry-${RELEASE_VERSION}.tar.gz" \
+            "dist/gantry-${RELEASE_VERSION}.tar.gz.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "v${RELEASE_VERSION}" \
+            --generate-notes

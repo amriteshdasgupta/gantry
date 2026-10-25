@@ -85,7 +85,7 @@ Before opening:
 
 In the description, say what changed, why, and how you verified it. If the PR touches supervision, jobs, or agents, include the scenario you exercised (restart mid-run, slow remote, dirty worktree, …).
 
-Validation is run locally. This repository does not use GitHub Actions or a CI/CD pipeline; run the relevant typecheck, lint, tests, and builds before publishing changes.
+Run the relevant typecheck, lint, tests, and builds locally before publishing changes. Pushes to `production` also run the GitHub Actions release workflow, which builds and verifies the release archive before publishing it. See [the release process](./docs/release.md) for version preparation.
 
 Small PRs win. A focused change with a clear test is easier to review and easier to revert.
 

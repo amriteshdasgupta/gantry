@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Automatically build, verify, and publish a versioned GitHub release with its archive and checksum when changes land on `production`.
 - Clean merged worktrees from Done ticket cards with an explicit confirmation, live local Git validation, active-work guards, and per-checkout results. Ticket history and branches are retained.
 - Support named workspace graph templates, choose a graph when creating a ticket, and save ticket graph drafts as reusable templates.
 - Restart a ticket graph from a chosen stage directly in PR review, carrying refreshed GitHub feedback and local review discussion into the correction loop.

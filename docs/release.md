@@ -4,7 +4,17 @@ Gantry follows [semantic versioning](https://semver.org/): `MAJOR.MINOR.PATCH`. 
 
 The two release scripts are `scripts/pack-release.mjs` (`npm run release:pack`) and `scripts/check-release.mjs` (`npm run release:verify`).
 
-## Cutting a release
+## Automatic releases from production
+
+Merging a pull request into `production` triggers [the release workflow](../.github/workflows/release.yml). Direct pushes to `production` trigger it too. Prepare the changelog and bump versions (including the lockfile) in the pull request before merging; the workflow uses the root `package.json` version and does not bump it automatically.
+
+The workflow runs on Linux with Node.js 22, installs with `npm ci`, runs typecheck and lint, then runs `release:pack` and `release:verify` (including tests from the packaged archive). It also installs and builds the Linux desktop app. Only after these succeed does it create `v<version>` at the exact triggering commit and publish a GitHub release with generated release notes, the Linux AppImage, `install.sh`, the source/runtime archive, and its SHA-256 sidecar.
+
+Use a new stable `MAJOR.MINOR.PATCH` version for each release. An existing tag fails the workflow rather than overwriting a release. Failed runs before publication can be rerun from the Actions tab. Release runs are serialized and do not cancel an active release.
+
+GitHub Actions must be enabled and the repository must allow the workflow's `GITHUB_TOKEN` to write repository contents. No separate publishing secret is needed.
+
+## Cutting a release manually
 
 1. **Update the changelog.** Add a `## [x.y.z] - YYYY-MM-DD` section to [CHANGELOG.md](../CHANGELOG.md) following Keep a Changelog. Do not release with a full `## [Unreleased]` section.
 2. **Bump versions.** Root `package.json`, `packages/shared`, `packages/server`, `packages/cli`, `packages/ui`, and `packages/server/src/version.ts`.
@@ -37,7 +47,7 @@ The two release scripts are `scripts/pack-release.mjs` (`npm run release:pack`) 
    git push origin vX.Y.Z
    ```
 
-   Tags do not trigger a pipeline. Build and verify release archives locally using the commands above.
+    Tags alone do not trigger the release workflow. For a manual release, build and verify release archives locally using the commands above. For an automatic release, merge the prepared version into `production` instead of creating the tag yourself.
 
 6. **Publish the GitHub release.** Attach the archive and its `.sha256` sidecar. Verify a download with:
 
@@ -55,7 +65,7 @@ The two release scripts are `scripts/pack-release.mjs` (`npm run release:pack`) 
 - [ ] `npx vitest run` green
 - [ ] `npm run release:pack` produced `dist/gantry-<version>.tar.gz` (+ `.sha256`)
 - [ ] `npm run release:verify` passed
-- [ ] tag pushed, release job green
+- [ ] production release workflow green, or manual tag pushed after local verification
 - [ ] archive and checksum published
 
 ## After a breaking change
