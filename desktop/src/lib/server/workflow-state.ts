@@ -255,7 +255,7 @@ function offerAttemptLimit(run: Execution, nodeId: string, edgeId?: string) {
 
 /** Existing saved runs get the same controls without asking the coordinator to run again. */
 export function restoreAttemptLimitDecision(run: Execution) {
-  if (run.state !== 'waiting' || run.decision) return;
+  if (run.state !== 'waiting' || run.decision || typeof run.message !== 'string') return;
   const targets = run.graph.nodes.filter((n) =>
     (run.message.startsWith(`Visit limit reached for ${n.label}. `) || run.message.startsWith(`Retry limit reached for ${n.label}. `)) &&
     run.attempts.filter((a) => a.nodeId === n.id).length >= (n.maxAttempts ?? 3));
