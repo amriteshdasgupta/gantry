@@ -103,6 +103,14 @@ npm run desktop:build
 
 You'll find the app in `desktop/dist/`. On Apple Silicon Macs, open `desktop/dist/mac-arm64/Gantry.app`.
 
+After changing the source, rebuild, install into `/Applications`, and restart the app on Apple Silicon macOS with:
+
+```sh
+npm run desktop:restart
+```
+
+This builds the runtime, quits Gantry, rebuilds and installs the desktop app, then reopens it. If dependencies changed, run `npm ci` and `npm run desktop:setup` first.
+
 **Linux.** Install the desktop app with one command — it downloads the latest AppImage (Chromium + Node bundled, runs on any glibc 2.28+ distro: Arch, Debian, Ubuntu, RHEL8) and puts `gantry` on your PATH:
 
 ```sh

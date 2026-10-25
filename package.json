@@ -28,6 +28,7 @@
     "desktop:dev": "npm run dev --prefix desktop",
     "desktop:build": "npm run build && npm run app:build --prefix desktop",
     "desktop:start": "npm run build && npm run app:start --prefix desktop",
+    "desktop:restart": "node scripts/restart-desktop.js",
     "desktop:test": "npm run test:e2e --prefix desktop"
   },
   "devDependencies": {

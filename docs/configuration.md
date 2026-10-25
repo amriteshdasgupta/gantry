@@ -357,6 +357,8 @@ Use the variable name your application reads; Gantry does not assume a frontend 
 
 Managed `runtime: node` services run with Node watch mode by default. Changes to the entry or imported modules restart the service process on its existing port; logs are retained. This includes modules loaded through the checkout's TypeScript loader. Set `watch: false` on a Node service to opt out. Arbitrary files read as data and newly created, not-yet-imported modules are not guaranteed to trigger a restart.
 
+**Linux atomic-save limitation:** Node's built-in watcher can stop detecting edits to a file after an editor replaces it using an atomic save (write a temporary file, then rename it over the original). If the backend serves stale code, restart the affected preview in Gantry to load the latest code and recreate its watchers. This may recur after another atomic save. Where supported, configure your editor to save files in place instead. Automatic reload after repeated atomic saves is not guaranteed on Linux.
+
 For `runtime: command`, use the framework's development command or add `--watch --watch-preserve-output` to a Node command. Gantry does not wrap arbitrary commands in a second watcher. Vite already reloads its frontend independently. Backend restarts briefly interrupt requests and reset in-memory server state; they do not reload the browser page.
 
 ## Workspace graph templates
