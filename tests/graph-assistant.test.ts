@@ -55,8 +55,61 @@ describe('graph assistant contract', () => {
 
   test('rejects missing providers and invalid input before running a driver', async () => {
     await expect(assistGraph({ ...input, providerId: 'deleted' }, new AbortController().signal)).rejects.toMatchObject({ status: 400 });
-    await expect(assistGraph({ ...input, graph: { ...graph, entryNodeId: 'missing' } }, new AbortController().signal)).rejects.toMatchObject({ status: 400 });
+    await expect(assistGraph({ ...input, graph: { ...graph, nodes: 'not an array' } }, new AbortController().signal)).rejects.toMatchObject({ status: 400 });
     expect(mocks.driver).not.toHaveBeenCalled();
+  });
+
+  const disconnected = {
+    ...graph,
+    autoStart: true,
+    nodes: [...graph.nodes, { ...graph.nodes[0], id: 'review', label: 'Review' }],
+  };
+  const repaired = {
+    ...disconnected,
+    edges: [{ id: 'plan-review', source: 'plan', target: 'review', label: 'The plan is complete' }],
+  };
+
+  test.each([
+    ['a disconnected automatic graph', disconnected],
+    ['a missing start node', { ...disconnected, entryNodeId: undefined }],
+    ['a deleted start node and dangling connection', { ...repaired, entryNodeId: 'deleted', edges: [{ ...repaired.edges[0], source: 'deleted' }] }],
+  ])('forwards %s intact so the provider can repair it', async (_name, draft) => {
+    const original = structuredClone(draft);
+    mocks.driver.mockImplementation(async ({ hooks }: RunInput) => hooks.text(JSON.stringify({ message: 'Repaired the graph.', graph: repaired })));
+
+    const result = await assistGraph({ ...input, graph: draft, prompt: 'Connect every node and fix the start node' }, new AbortController().signal);
+
+    expect(JSON.parse(mocks.driver.mock.calls[0][0].prompt).currentGraph).toEqual(JSON.parse(JSON.stringify(draft)));
+    expect(result.graph).toEqual(repaired);
+    expect(result.graph.autoStart).toBe(true);
+    expect(draft).toEqual(original);
+  });
+
+  test('draft validation retains field types, identifiers and size limits', async () => {
+    for (const invalid of [
+      { ...graph, autoStart: 'yes' },
+      { ...graph, nodes: [{ ...graph.nodes[0], id: 'Invalid ID' }] },
+      { ...graph, nodes: [{ ...graph.nodes[0], instructions: 'x'.repeat(10001) }] },
+      { ...graph, nodes: Array(51).fill(graph.nodes[0]) },
+      { ...graph, edges: Array(251).fill(repaired.edges[0]) },
+    ]) {
+      await expect(assistGraph({ ...input, graph: invalid }, new AbortController().signal)).rejects.toMatchObject({ status: 400 });
+    }
+
+    expect(mocks.driver).not.toHaveBeenCalled();
+  });
+
+  test('incomplete drafts still require fully valid replacement graphs with the original automatic-run setting', async () => {
+    for (const proposal of [
+      disconnected,
+      { ...repaired, entryNodeId: 'missing' },
+      { ...repaired, edges: [{ ...repaired.edges[0], target: 'missing' }] },
+      { ...disconnected, autoStart: false },
+    ]) {
+      mocks.driver.mockImplementation(async ({ hooks }: RunInput) => hooks.text(JSON.stringify({ message: 'Not repaired.', graph: proposal })));
+
+      await expect(assistGraph({ ...input, graph: disconnected }, new AbortController().signal)).rejects.toMatchObject({ status: 502 });
+    }
   });
 
   test('uses the explicitly chosen provider and preserves the manual automatic-run switch', async () => {

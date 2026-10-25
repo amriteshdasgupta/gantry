@@ -2,7 +2,10 @@ import { z } from 'zod';
 import { workflowSchema } from '../../../packages/shared/src/workflow';
 
 export const graphAssistantRequestSchema = z.object({
-  graph: workflowSchema,
+  // Drafts may have disconnected nodes or missing references that the assistant
+  // needs to repair. Keep field validation and limits, but defer graph-wide
+  // invariants to the fully validated replacement in the response schema.
+  graph: workflowSchema.innerType(),
   prompt: z.string().trim().min(1).max(10000),
   providerId: z.string().max(100).optional(),
   history: z

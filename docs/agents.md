@@ -217,6 +217,9 @@ concurrently. It does not start stages or enable automatic runs on its own.
 
 The desktop's local `POST /api/graph-assistant` accepts `graph`, `prompt`, optional
 `providerId`, and optional `history` (`role` and `text`, up to twelve messages).
-It returns `{ message, graph }` after validating the complete directed graph.
+Draft inputs retain field validation and size limits, but may have disconnected
+nodes or missing start nodes and references so the assistant can repair them.
+It returns `{ message, graph }` only after validating the complete replacement
+directed graph, including reachability with the draft's automatic-run setting.
 The endpoint is same-origin/local-only and does not write workspace or ticket
 state. The editor keeps the automatic-run switch under manual control.
