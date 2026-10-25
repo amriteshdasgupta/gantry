@@ -14,6 +14,8 @@ Use a new stable `MAJOR.MINOR.PATCH` version for each release. An existing tag f
 
 GitHub Actions must be enabled and the repository must allow the workflow's `GITHUB_TOKEN` to write repository contents. No separate publishing secret is needed.
 
+To trigger a release manually (for example, after enabling Actions), select **Release → Run workflow** in the Actions tab and choose `production`. Manual runs on other branches are skipped.
+
 ## Cutting a release manually
 
 1. **Update the changelog.** Add a `## [x.y.z] - YYYY-MM-DD` section to [CHANGELOG.md](../CHANGELOG.md) following Keep a Changelog. Do not release with a full `## [Unreleased]` section.
