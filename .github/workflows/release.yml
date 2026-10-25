@@ -20,7 +20,7 @@ jobs:
       - run: npm run build
       - run: npm run desktop:setup
       - run: npm --prefix desktop run app:build:linux
-      - run: gh release create "$TAG" desktop/dist/*.AppImage --target "$GITHUB_REF_NAME" --generate-notes
+      - run: gh release create "$TAG" desktop/dist/*.AppImage install.sh --target "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
