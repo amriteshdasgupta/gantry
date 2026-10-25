@@ -85,6 +85,8 @@ const TERMINALS: Partial<Record<NodeJS.Platform, Terminal[]>> = {
     cli("konsole", "Konsole", "konsole", (p) => ["-e", p]),
     cli("xfce4-terminal", "Xfce Terminal", "xfce4-terminal", (p) => ["-x", p]),
     cli("xterm", "xterm", "xterm", (p) => ["-e", p]),
+    // Debian and Ubuntu's link to the user's default terminal, for terminals not listed above.
+    cli("x-terminal-emulator", "Default terminal", "x-terminal-emulator", (p) => ["-e", p]),
   ],
 };
 /** The terminal apps installed on this machine, in order of preference. */

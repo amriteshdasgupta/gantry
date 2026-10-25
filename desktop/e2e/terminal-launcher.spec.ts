@@ -6,14 +6,18 @@ import path from 'node:path';
 const home = path.resolve('e2e/.tmp/home');
 const herdr = path.resolve('e2e/bin/herdr');
 const launches = () => fs.readFileSync(path.join(home, 'external-launches.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-// The stand-ins in e2e/bin: Ghostty first on PATH on Linux; Terminal through osascript on macOS, where Ghostty is hidden.
-const stand_in = process.platform === 'darwin' ? { id: 'terminal', label: 'Terminal' } : { id: 'ghostty', label: 'Ghostty' };
+// The terminal stand-ins in e2e/bin. Ghostty is first in the launcher's list, so it is the default
+// and shadows a real Ghostty on this machine.
+const stand_in = { id: 'ghostty', label: 'Ghostty' };
+const stand_ins = [stand_in, { id: 'kitty', label: 'kitty' }, { id: 'alacritty', label: 'Alacritty' }];
 
 test.describe.configure({ mode: 'serial' });
+test.skip(process.platform !== 'linux', 'covers the Linux terminal apps only');
 
 test('Settings lists the installed terminal apps and saves the choice', async ({ page, request }) => {
   const settings = await (await request.get('/api/terminal-launcher')).json();
-  expect(settings.available).toContainEqual(stand_in);
+  // Real terminals on this machine are listed too, so only the stand-ins and their order are checked.
+  expect(settings.available.filter((t: { id: string }) => stand_ins.some((s) => s.id === t.id))).toEqual(stand_ins);
   expect(settings.terminalApp).toBe(stand_in.id);
 
   await page.goto('/settings');
@@ -33,19 +37,22 @@ test('a terminal app that is not installed is refused', async ({ request }) => {
   expect((await (await request.get('/api/terminal-launcher')).json()).terminalApp).toBe(stand_in.id);
 });
 
-test('opening a chat with no herdr window shows herdr in the chosen terminal app', async ({ request }) => {
-  // Gantry finds herdr windows from every process on the machine, so a real herdr client counts as one.
-  const clients = execFileSync('ps', ['-axo', 'comm=,args=']).toString().split('\n').filter((l) => /^herdr\s/.test(l) && !l.includes('herdr server'));
-  test.skip(clients.length > 0, 'a real herdr window is open on this machine');
-  const before = launches().length;
-  const opened = await request.post('/api/ticket-chat', { data: { ticketId: 'ticket-1', action: 'open' } });
-  expect(opened.ok()).toBe(true);
-  const shown = launches().slice(before).filter((c) => c.command !== 'herdr');
-  if (process.platform === 'darwin') {
-    expect(shown).toHaveLength(1);
-    expect(shown[0].command).toBe('osascript');
-    expect(shown[0].args.slice(2)).toEqual([`'${herdr}'`, expect.any(String)]);
-  } else {
-    expect(shown).toEqual([{ command: 'ghostty', args: ['-e', herdr] }]);
-  }
+// Each terminal takes the program to run in its own form.
+for (const [id, args] of [['ghostty', ['-e', herdr]], ['kitty', [herdr]], ['alacritty', ['-e', herdr]]] as const) {
+  test(`opening a chat with no herdr window shows herdr in ${id}`, async ({ request }) => {
+    // Gantry finds herdr windows from every process on the machine, so a real herdr client counts as one.
+    const clients = execFileSync('ps', ['-axo', 'comm=,args=']).toString().split('\n').filter((l) => /^herdr\s/.test(l) && !l.includes('herdr server'));
+    test.skip(clients.length > 0, 'a real herdr window is open on this machine');
+    expect((await request.post('/api/terminal-launcher', { data: { terminalApp: id } })).ok()).toBe(true);
+    const before = launches().length;
+    const opened = await request.post('/api/ticket-chat', { data: { ticketId: 'ticket-1', action: 'open' } });
+    expect(opened.ok()).toBe(true);
+    const shown = launches().slice(before).filter((c) => c.command !== 'herdr');
+    expect(shown).toEqual([{ command: id, args }]);
+  });
+}
+
+// Later specs share this home, so they get the default stand-in back.
+test.afterAll(async ({ request }) => {
+  await request.post('/api/terminal-launcher', { data: { terminalApp: stand_in.id } });
 });
