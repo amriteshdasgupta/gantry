@@ -26,3 +26,6 @@ packages/*/dist/
 .gantry-runtime/
 next-env.d.ts
 e2e/.tmp/
+
+# JetBrains IDE config (per-machine)
+.idea/

@@ -13,7 +13,8 @@
     "app:start": "npm run app:bundle && electron .",
     "app:build": "node scripts/clean-dist.mjs && npm run app:bundle && electron-builder --dir",
     "app:install": "npm run app:build && rm -rf \"/Applications/Gantry.app\" && cp -R \"dist/mac-arm64/Gantry.app\" /Applications/",
-    "app:build:win": "node scripts/clean-dist.mjs && npm run app:bundle && electron-builder --win nsis"
+    "app:build:win": "node scripts/clean-dist.mjs && npm run app:bundle && electron-builder --win nsis",
+    "app:build:linux": "node scripts/clean-dist.mjs && npm run app:bundle && electron-builder --linux AppImage"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -80,6 +81,12 @@
     ],
     "win": {
       "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Development",
+      "icon": "electron/icon.png",
+      "artifactName": "Gantry-x86_64.${ext}"
     }
   }
 }
