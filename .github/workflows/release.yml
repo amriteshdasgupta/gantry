@@ -16,13 +16,11 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci
-      # CLI: self-contained tarball (bundled Node + app).
-      - run: npm run release:linux
-      # Desktop: self-contained Electron AppImage.
+      # Builds packages/ui/dist, which the desktop bundle stages into the app.
+      - run: npm run build
       - run: npm run desktop:setup
       - run: npm --prefix desktop run app:build:linux
-      # One release carrying both the CLI tarball (+checksum) and the AppImage.
-      - run: gh release create "$TAG" dist/gantry-linux-x64.tar.gz dist/gantry-linux-x64.tar.gz.sha256 desktop/dist/*.AppImage --target "$GITHUB_REF_NAME" --generate-notes
+      - run: gh release create "$TAG" desktop/dist/*.AppImage --target "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
