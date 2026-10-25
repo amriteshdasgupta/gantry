@@ -2,7 +2,7 @@
 
 import { ticketServiceScopes } from "@/lib/client/gantry";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
-import { ArrowUpRightIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, Trash2Icon } from "lucide-react";
+import { ArrowUpRightIcon, FolderOpenIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -247,6 +247,11 @@ export function GantryWorkspace() {
         </div>
       </aside>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
+        {adding && <form className="flex flex-wrap items-end gap-3 border-b p-6" onSubmit={(e) => { e.preventDefault(); void act(() => gantry.addProject(workspace.trim()), "Workspace connected").then((ok) => { if (ok) { setAdding(false); setWorkspace(""); } }); }}>
+          <label className="min-w-64 flex-1 space-y-2 text-sm">Workspace folder<Input value={workspace} onChange={(e) => setWorkspace(e.target.value)} placeholder="/path/to/repository or workspace" required autoFocus /></label>
+          {typeof window !== "undefined" && "gantryDesktop" in window && <Button type="button" variant="outline" onClick={() => void (window as unknown as { gantryDesktop: { pickFolder(): Promise<string | null> } }).gantryDesktop.pickFolder().then(dir => { if (dir) setWorkspace(dir); })}><FolderOpenIcon /> Browse…</Button>}
+          <Button type="submit" disabled={busy || !workspace.trim()}>Connect workspace</Button><Button type="button" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+        </form>}
         {area === "workflow" && project && <WorkspaceGraphPage key={project.id} project={project}/>}
         {area !== "workflow" && area !== "previews" && !(area === "reviews" && reviewSpace) && <div className="flex flex-wrap items-center gap-3 border-b px-6 py-5">
           <div className="min-w-0 flex-1"><h1 className="text-xl font-semibold">{area === "tickets" ? "Tickets" : "Ready for review"}</h1>
@@ -259,10 +264,6 @@ export function GantryWorkspace() {
           {area === "reviews" && project && <Button variant="outline" disabled={busy} onClick={() => void act(() => gantry.refreshProject(project.id), "Remote sync queued")}><RefreshCwIcon /> Sync remote</Button>}
         </div>}
         {error && <div role="alert" className="border-b bg-destructive/5 px-6 py-3 text-sm text-destructive">{error} {data && "Showing the last loaded state."}</div>}
-        {adding && <form className="flex flex-wrap items-end gap-3 border-b p-6" onSubmit={(e) => { e.preventDefault(); void act(() => gantry.addProject(workspace.trim()), "Workspace connected").then((ok) => { if (ok) { setAdding(false); setWorkspace(""); } }); }}>
-          <label className="min-w-64 flex-1 space-y-2 text-sm">Workspace folder<Input value={workspace} onChange={(e) => setWorkspace(e.target.value)} placeholder="/path/to/repository or workspace" required /></label>
-          <Button type="submit" disabled={busy || !workspace.trim()}>Connect workspace</Button><Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
-        </form>}
         {!data && !error && <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground"><Loader2Icon className="size-4 animate-spin" /> Loading your workspaces…</div>}
         {data && !project && <div className="max-w-xl space-y-3 p-8"><h2 className="text-lg font-medium">Connect your first workspace</h2><p className="text-sm leading-relaxed text-muted-foreground">Choose a Git repository or a folder of repositories. Gantry creates local configuration automatically. Configure your provider once in Settings, then start a ticket.</p><Button onClick={() => setAdding(true)}>Add workspace</Button></div>}
         <SetupCheck />

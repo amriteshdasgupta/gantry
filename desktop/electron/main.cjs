@@ -1,5 +1,5 @@
 // Gantry as a desktop app: starts the bundled Next.js server and shows it in a native window.
-const { app, BrowserWindow, Menu, dialog, shell, utilityProcess } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, utilityProcess } = require("electron");
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const net = require("node:net");
@@ -187,7 +187,7 @@ function createWindow() {
     trafficLightPosition: { x: 16, y: 17 },
     backgroundColor: "#ffffff",
     show: false,
-    webPreferences: { contextIsolation: true, sandbox: true },
+    webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, "preload.cjs") },
   });
   mainWindow.once("ready-to-show", () => mainWindow.show());
   // GitHub links and anything else outside the app open in the default browser.
@@ -266,6 +266,12 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (!mainWindow && baseUrl) createWindow();
+});
+
+ipcMain.handle("pick-folder", async (event) => {
+  if (!isInternal(event.senderFrame?.url)) return null;
+  const { canceled, filePaths } = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), { properties: ["openDirectory"] });
+  return canceled ? null : filePaths[0];
 });
 
 app.whenReady().then(async () => {
