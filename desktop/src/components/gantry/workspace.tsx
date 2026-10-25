@@ -261,7 +261,12 @@ export function GantryWorkspace() {
     {adding && <AddWorkspaceDialog busy={busy} onCancel={() => setAdding(false)} onConnect={dir => void act(() => gantry.addProject(dir), "Workspace connected").then(ok => { if (ok) setAdding(false); })} />}
     {deleting && <DeleteTicketDialog title={deleting.title} busy={busy} onCancel={() => setDeleting(null)} onDelete={() => void act(() => gantry.deleteTicket(deleting.id), "Ticket deleted").then(ok => { if (ok) { if (selected === deleting.id) closeTicket(); setDeleting(null); } })} />}
     <header className="app-bar flex h-12 shrink-0 items-center gap-3 border-b px-4">
-      <span className="flex items-center gap-2 text-sm font-semibold"><LayoutListIcon className="size-5 text-violet-600 dark:text-violet-300" />Gantry</span>
+      <span className="flex items-center gap-2 text-sm font-semibold">
+        {/* A local SVG keeps the selected mark identical to the launcher artwork. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/gantry-icon.svg" alt="" width={24} height={24} className="size-6 shrink-0" />
+        Gantry
+      </span>
       <div className="flex-1" /><span className="hidden text-xs text-muted-foreground sm:block" role="status">{error ? "Connection interrupted" : data ? "Connected locally" : "Connecting…"}</span>
       <SettingsLink /><ThemeToggle />
     </header>

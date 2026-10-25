@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Adopt the original Routed G logo: white on violet across the README, desktop header, browser favicon, and macOS, Windows, and Linux app icons, including the development Dock icon.
+
 ## [0.1.1] - 2026-10-26
 
 ### Fixed

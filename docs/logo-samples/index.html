@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gantry — logo studies</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: #211d2c;
+        background: #f4f2ee;
+        font-synthesis: none;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        max-width: 1440px;
+        margin: 0 auto;
+        padding: 48px;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 32px;
+        margin-bottom: 36px;
+      }
+
+      .eyebrow,
+      .label {
+        font-size: 11px;
+        font-weight: 650;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow {
+        color: #6d28d9;
+        margin: 0 0 12px;
+      }
+
+      h1 {
+        font-size: 44px;
+        line-height: 1.1;
+        letter-spacing: -0.045em;
+        margin: 0;
+      }
+
+      header > p {
+        max-width: 290px;
+        font-size: 14px;
+        line-height: 1.6;
+        margin: 0;
+        color: #625b6e;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 24px;
+      }
+
+      article {
+        background: #fff;
+        border: 1px solid #ded9e5;
+        border-radius: 16px;
+        overflow: hidden;
+      }
+
+      .heading {
+        padding: 24px 24px 0;
+      }
+
+      .number {
+        color: #746b81;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      h2 {
+        font-size: 24px;
+        letter-spacing: -0.035em;
+        margin: 8px 0;
+      }
+
+      .description {
+        min-height: 44px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #625b6e;
+        margin: 0;
+      }
+
+      .hero {
+        display: grid;
+        place-items: center;
+        padding: 28px 0;
+      }
+
+      .tile {
+        display: grid;
+        place-items: center;
+        background: #6d28d9;
+        border-radius: 23%;
+        width: 256px;
+        height: 256px;
+      }
+
+      .tile img,
+      .dark img {
+        filter: invert(1);
+      }
+
+      .lockup {
+        padding: 22px 24px;
+        border-top: 1px solid #eae6ef;
+      }
+
+      .brand {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        font-size: 30px;
+        font-weight: 650;
+        letter-spacing: -0.045em;
+      }
+
+      .lockup p {
+        font-size: 12px;
+        margin: 8px 0 0;
+        color: #625b6e;
+      }
+
+      .dark {
+        background: #191621;
+        color: #fff;
+        border-top-color: #191621;
+      }
+
+      .dark p {
+        color: #c8c1d5;
+      }
+
+      .proof {
+        padding: 24px;
+      }
+
+      .label {
+        margin: 0 0 18px;
+        color: #746b81;
+      }
+
+      .sizes {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      figure {
+        display: grid;
+        justify-items: center;
+        gap: 10px;
+        margin: 0;
+      }
+
+      figcaption {
+        color: #746b81;
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .large-proof {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid #eae6ef;
+      }
+
+      .large-proof p {
+        font-size: 12px;
+        line-height: 1.6;
+        color: #625b6e;
+      }
+
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        margin-top: 24px;
+        color: #625b6e;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      a {
+        color: #6d28d9;
+        text-underline-offset: 3px;
+      }
+
+      @media (max-width: 1100px) {
+        body {
+          padding: 24px;
+        }
+
+        header,
+        footer {
+          align-items: start;
+          flex-direction: column;
+        }
+
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        article {
+          max-width: 520px;
+          width: 100%;
+          margin: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">Gantry / Identity studies / 01–03</p>
+        <h1>A deliberate path forward.</h1>
+      </div>
+      <p>Three original marks for a graph that guides coding agents from task to reviewed work.</p>
+    </header>
+
+    <main>
+      <article>
+        <div class="heading">
+          <span class="number">01 / NAME + PROCESS</span>
+          <h2>Routed G</h2>
+          <p class="description">One continuous route. One clear destination.<br />The name becomes the workflow.</p>
+        </div>
+        <div class="hero">
+          <div class="tile"><img src="routed-g.svg" width="256" height="256" alt="Routed G app icon" /></div>
+        </div>
+        <div class="lockup">
+          <div class="brand"><img src="routed-g.svg" width="40" height="40" alt="" /><span>Gantry</span></div>
+          <p>A Graph for your agents to follow</p>
+        </div>
+        <div class="lockup dark">
+          <div class="brand"><img src="routed-g.svg" width="40" height="40" alt="" /><span>Gantry</span></div>
+          <p>A Graph for your agents to follow</p>
+        </div>
+        <div class="proof">
+          <p class="label">Monochrome / Actual pixels</p>
+          <div class="sizes">
+            <figure>
+              <img src="routed-g.svg" width="16" height="16" alt="Routed G at 16 pixels" />
+              <figcaption>16</figcaption>
+            </figure>
+            <figure>
+              <img src="routed-g.svg" width="20" height="20" alt="Routed G at 20 pixels" />
+              <figcaption>20</figcaption>
+            </figure>
+            <figure>
+              <img src="routed-g.svg" width="24" height="24" alt="Routed G at 24 pixels" />
+              <figcaption>24</figcaption>
+            </figure>
+            <figure>
+              <img src="routed-g.svg" width="32" height="32" alt="Routed G at 32 pixels" />
+              <figcaption>32</figcaption>
+            </figure>
+            <figure>
+              <img src="routed-g.svg" width="48" height="48" alt="Routed G at 48 pixels" />
+              <figcaption>48</figcaption>
+            </figure>
+          </div>
+          <div class="large-proof">
+            <figure>
+              <img src="routed-g.svg" width="128" height="128" alt="Routed G at 128 pixels" />
+              <figcaption>128</figcaption>
+            </figure>
+            <p>Open counter.<br />Squared stage terminal.<br />Recommended direction.</p>
+          </div>
+        </div>
+      </article>
+
+      <article>
+        <div class="heading">
+          <span class="number">02 / STRUCTURE + CONTROL</span>
+          <h2>Gantry Frame</h2>
+          <p class="description">A strong frame supporting the work.<br />One carriage; no machinery to decode.</p>
+        </div>
+        <div class="hero">
+          <div class="tile"><img src="gantry-frame.svg" width="256" height="256" alt="Gantry Frame app icon" /></div>
+        </div>
+        <div class="lockup">
+          <div class="brand"><img src="gantry-frame.svg" width="40" height="40" alt="" /><span>Gantry</span></div>
+          <p>A Graph for your agents to follow</p>
+        </div>
+        <div class="lockup dark">
+          <div class="brand"><img src="gantry-frame.svg" width="40" height="40" alt="" /><span>Gantry</span></div>
+          <p>A Graph for your agents to follow</p>
+        </div>
+        <div class="proof">
+          <p class="label">Monochrome / Actual pixels</p>
+          <div class="sizes">
+            <figure>
+              <img src="gantry-frame.svg" width="16" height="16" alt="Gantry Frame at 16 pixels" />
+              <figcaption>16</figcaption>
+            </figure>
+            <figure>
+              <img src="gantry-frame.svg" width="20" height="20" alt="Gantry Frame at 20 pixels" />
+              <figcaption>20</figcaption>
+            </figure>
+            <figure>
+              <img src="gantry-frame.svg" width="24" height="24" alt="Gantry Frame at 24 pixels" />
+              <figcaption>24</figcaption>
+            </figure>
+            <figure>
+              <img src="gantry-frame.svg" width="32" height="32" alt="Gantry Frame at 32 pixels" />
+              <figcaption>32</figcaption>
+            </figure>
+            <figure>
+              <img src="gantry-frame.svg" width="48" height="48" alt="Gantry Frame at 48 pixels" />
+              <figcaption>48</figcaption>
+            </figure>
+          </div>
+          <div class="large-proof">
+            <figure>
+              <img src="gantry-frame.svg" width="128" height="128" alt="Gantry Frame at 128 pixels" />
+              <figcaption>128</figcaption>
+            </figure>
+            <p>Supporting beam.<br />Offset carriage.<br />Grounded and architectural.</p>
+          </div>
+        </div>
+      </article>
+
+      <article>
+        <div class="heading">
+          <span class="number">03 / ITERATION + DELIVERY</span>
+          <h2>Review Loop</h2>
+          <p class="description">A return path built into the process.<br />Review sends work through a better pass.</p>
+        </div>
+        <div class="hero">
+          <div class="tile"><img src="review-loop.svg" width="256" height="256" alt="Review Loop app icon" /></div>
+        </div>
+        <div class="lockup">
+          <div class="brand"><img src="review-loop.svg" width="40" height="40" alt="" /><span>Gantry</span></div>
+          <p>A Graph for your agents to follow</p>
+        </div>
+        <div class="lockup dark">
+          <div class="brand"><img src="review-loop.svg" width="40" height="40" alt="" /><span>Gantry</span></div>
+          <p>A Graph for your agents to follow</p>
+        </div>
+        <div class="proof">
+          <p class="label">Monochrome / Actual pixels</p>
+          <div class="sizes">
+            <figure>
+              <img src="review-loop.svg" width="16" height="16" alt="Review Loop at 16 pixels" />
+              <figcaption>16</figcaption>
+            </figure>
+            <figure>
+              <img src="review-loop.svg" width="20" height="20" alt="Review Loop at 20 pixels" />
+              <figcaption>20</figcaption>
+            </figure>
+            <figure>
+              <img src="review-loop.svg" width="24" height="24" alt="Review Loop at 24 pixels" />
+              <figcaption>24</figcaption>
+            </figure>
+            <figure>
+              <img src="review-loop.svg" width="32" height="32" alt="Review Loop at 32 pixels" />
+              <figcaption>32</figcaption>
+            </figure>
+            <figure>
+              <img src="review-loop.svg" width="48" height="48" alt="Review Loop at 48 pixels" />
+              <figcaption>48</figcaption>
+            </figure>
+          </div>
+          <div class="large-proof">
+            <figure>
+              <img src="review-loop.svg" width="128" height="128" alt="Review Loop at 128 pixels" />
+              <figcaption>128</figcaption>
+            </figure>
+            <p>Rectangular return.<br />Single directional wedge.<br />The review cycle made visible.</p>
+          </div>
+        </div>
+      </article>
+    </main>
+
+    <footer>
+      <span>32-unit masters · Flat violet #6D28D9 · 256 px tile previews<br />View at 100% browser zoom for actual-size proofs. Original concept artwork.</span>
+      <a href="README.md">Design rationale and handoff →</a>
+    </footer>
+  </body>
+</html>

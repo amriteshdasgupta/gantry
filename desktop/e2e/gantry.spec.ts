@@ -4,6 +4,31 @@ import path from 'node:path';
 
 const runtimeUrl = `http://127.0.0.1:${process.env.GANTRY_E2E_RUNTIME_PORT ?? 3458}`;
 
+test('Gantry serves its selected logo and browser icons locally', async ({ page }) => {
+  await page.goto('/');
+  const logo = page.locator('.app-bar img[src="/gantry-icon.svg"]');
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute('alt', '');
+  expect(await logo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+
+  const svg = await page.request.get('/gantry-icon.svg');
+  expect(svg.ok()).toBe(true);
+  expect(await svg.text()).toContain('#6D28D9');
+
+  const icons = await page.locator('link[rel="icon"]').evaluateAll(links =>
+    links.map(link => (link as HTMLLinkElement).href),
+  );
+  expect(icons.some(url => new URL(url).pathname === '/favicon.ico')).toBe(true);
+  expect(icons.some(url => new URL(url).pathname === '/icon.svg')).toBe(true);
+
+  for (const url of icons) {
+    expect(new URL(url).origin).toBe(new URL(page.url()).origin);
+    const response = await page.request.get(url);
+    expect(response.ok()).toBe(true);
+    expect((await response.body()).length).toBeGreaterThan(0);
+  }
+});
+
 test('Gantry ticket, preview and review workflow stays inside Gantry', async ({ page }) => {
   const initialSpaces = await (await page.request.get('/api/spaces')).json();
   await page.goto('/');

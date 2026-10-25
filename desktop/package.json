@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
+    "icons:generate": "node scripts/generate-icons.mjs",
     "app:bundle": "next build && node scripts/bundle-server.mjs && node scripts/bundle-gantry.mjs",
     "app:start": "npm run app:bundle && electron .",
     "app:build": "node scripts/clean-dist.mjs && npm run app:bundle && electron-builder --dir",
@@ -45,6 +46,7 @@
     "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.4.1",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
@@ -60,13 +62,14 @@
     "files": [
       "electron/main.cjs",
       "electron/preload.cjs",
+      "electron/icon.png",
       "package.json",
       "!node_modules/**/*"
     ],
     "mac": {
       "target": "dir",
       "category": "public.app-category.developer-tools",
-      "icon": "electron/icon.png",
+      "icon": "electron/icon.icns",
       "identity": null,
       "darkModeSupport": true
     },
@@ -81,7 +84,8 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "electron/icon.ico"
     },
     "linux": {
       "target": "AppImage",
