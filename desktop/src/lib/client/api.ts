@@ -16,8 +16,10 @@ const post = (body: unknown): RequestInit => ({
 
 /** How chats open in herdr. Mirrors LauncherSettings on the server. */
 export interface TerminalLauncher {
-  terminalApp: "ghostty" | "terminal";
+  terminalApp: string;
   herdrPath: string;
+  /** The terminal apps installed on this computer. */
+  available: { id: string; label: string }[];
 }
 
 export interface HomeData {
