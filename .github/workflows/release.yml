@@ -1,0 +1,25 @@
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create (e.g. v0.1.0)'
+        required: true
+permissions:
+  contents: write
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run release:linux
+      # Creates the tag on the branch this run was dispatched from, then
+      # publishes the release with the tarball + checksum attached.
+      - run: gh release create "$TAG" dist/gantry-linux-x64.tar.gz dist/gantry-linux-x64.tar.gz.sha256 --target "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}

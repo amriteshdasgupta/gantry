@@ -23,6 +23,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc -b packages/shared packages/server packages/cli && tsc --noEmit -p packages/ui",
     "release:pack": "node scripts/pack-release.mjs",
+    "release:linux": "node scripts/pack-linux.mjs",
     "release:verify": "node scripts/check-release.mjs",
     "desktop:setup": "npm ci --prefix desktop",
     "desktop:dev": "npm run dev --prefix desktop",
