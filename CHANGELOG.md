@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Prevent a pending review response from overriding a newer workspace, view, or ticket selection. The review is saved without reopening over the user's latest navigation.
 - Open unlinked workspace PRs in an explicit review space instead of another workspace's current ticket space, and retain a deep-linked workspace after its ticket completes.
 - Guard merged-worktree cleanup against workflow activity on every ticket sharing a branch, allow idle paused/waiting workflows, and revalidate nested squash merges through cached parent PRs.
 - Show full individual workflow graphs and current stages in the desktop Graph view, limited to in-progress tickets.

@@ -32,3 +32,20 @@ export async function openWorkspaceReview(
 
   return targetSpace;
 }
+
+/** A completed request may navigate only while it is still the latest intent. */
+export function createWorkspaceReviewNavigation() {
+  let revision = 0;
+
+  return {
+    invalidate() {
+      revision += 1;
+    },
+    async open(...args: Parameters<typeof openWorkspaceReview>) {
+      const requestRevision = ++revision;
+      const targetSpace = await openWorkspaceReview(...args);
+
+      return requestRevision === revision ? targetSpace : undefined;
+    },
+  };
+}

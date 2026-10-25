@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SettingsLink } from "@/components/settings-link";
 import { cn } from "@/lib/utils";
-import { openWorkspaceReview, selectedWorkspaceId } from "@/lib/client/workspace-navigation";
+import { createWorkspaceReviewNavigation, selectedWorkspaceId } from "@/lib/client/workspace-navigation";
 import { canvasWorkflow } from "@/lib/client/workflow-graph";
 import { gantry, type ProjectView, type StatusView, type TicketView, type Workflow } from "@/lib/client/gantry";
 
@@ -49,6 +49,7 @@ function TicketPreview({owner,onChat,onTicketReview,...props}:Omit<ComponentProp
 export function GantryWorkspace() {
   useGraphNavigationGuard();
   const [reviewSpace, setReviewSpace] = useState<string | null>(null);
+  const [reviewNavigation] = useState(createWorkspaceReviewNavigation);
   const [data, setData] = useState<StatusView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
@@ -98,8 +99,12 @@ export function GantryWorkspace() {
     });
     const onMerge = () => { void refresh(); };
     window.addEventListener("gantry:merge-completed", onMerge);
-    return () => { mounted.current = false; window.removeEventListener("gantry:merge-completed", onMerge); };
-  }, [refresh]);
+    return () => {
+      mounted.current = false;
+      reviewNavigation.invalidate();
+      window.removeEventListener("gantry:merge-completed", onMerge);
+    };
+  }, [refresh, reviewNavigation]);
   useEffect(() => {
     const update = () => { if (!document.hidden) void refresh(); };
     const timer = setInterval(update, area === "tickets" && ticketView === "graph" ? 2000 : 10000);
@@ -116,6 +121,7 @@ export function GantryWorkspace() {
         label: 'Open graph',
         onClick: () => {
           if (!confirmGraphNavigation()) return;
+          reviewNavigation.invalidate();
           setReviewSpace(null);
           setArea('tickets');
           setProjectId(item.projectId);
@@ -129,11 +135,14 @@ export function GantryWorkspace() {
       if(seen && executionNotices.current.get(item.id)!==key && execution.state==='complete') toast.success(`${item.title} is ready for review`,{description:execution.deliverables?.length?execution.deliverables.map(d=>`${d.repo}:${d.url} ${d.title}`).join('\n'):execution.message,action:openGraph});
       executionNotices.current.set(item.id,key);
     }
-  },[data]);
+  },[data, reviewNavigation]);
   const resolvedProjectId = selectedWorkspaceId(data?.projects ?? [], data?.tickets ?? [], projectId, reviewSpace);
   // Retain the resolved owner before its ticket can complete and lose reviewSpaceId.
   // Updating our own state here also keeps children from capturing the stale choice.
-  if (resolvedProjectId !== projectId) setProjectId(resolvedProjectId);
+  if (resolvedProjectId !== projectId) {
+    reviewNavigation.invalidate();
+    setProjectId(resolvedProjectId);
+  }
   const project = data?.projects.find(p => p.id === resolvedProjectId);
   const tickets = data?.tickets.filter((t) => t.projectId === project?.id) ?? [];
   const ticketColor = useTicketColors(project?.id ?? "", tickets);
@@ -162,7 +171,7 @@ export function GantryWorkspace() {
     await act(async () => {
       const linked = owner ?? tickets.find(t => t.pullRequests.some(p => urls.includes(p.url)) || pulls.some(g => g.branch === t.branch && Object.values(g.pulls).some(p => urls.includes(p.url))));
       if (linked && !linked.reviewSpaceId) throw new Error("Ticket space is not ready. Refresh Gantry and try again.");
-      const targetSpace = await openWorkspaceReview(urls, project?.name ?? "Workspace", linked?.reviewSpaceId);
+      const targetSpace = await reviewNavigation.open(urls, project?.name ?? "Workspace", linked?.reviewSpaceId);
       if (targetSpace) { setReviewSpace(targetSpace); setArea("reviews"); setSelected(null); setCreating(false); }
     });
   }
@@ -175,6 +184,7 @@ export function GantryWorkspace() {
   }
   function openTicket(id: string, preview = false, edit = false) {
     if (!confirmGraphNavigation()) return;
+    reviewNavigation.invalidate();
     setEditingTicket(edit);
     setSelected(id); setCreating(false); setLog(null);
     setTicketTab(preview ? "preview" : "details");
@@ -182,6 +192,7 @@ export function GantryWorkspace() {
   function closeTicket() {
     if (creating && busy) return;
     if (!confirmGraphNavigation()) return;
+    reviewNavigation.invalidate();
     setSelected(null); setCreating(false); setLog(null); setEditingTicket(false);
     const params = new URLSearchParams(window.location.search); params.delete("ticket");
     window.history.replaceState(null, "", `/?${params}`);
@@ -219,11 +230,18 @@ export function GantryWorkspace() {
   }, [area, reviewSpace, activeProjectId]);
   const navigateReview = useCallback((id: string | null) => {
     if (!confirmGraphNavigation()) return;
+    reviewNavigation.invalidate();
     if (activeProjectId) setProjectId(activeProjectId);
     setReviewSpace(id);
     setArea(current => id ? "reviews" : current === "reviews" ? "tickets" : current);
-  }, [activeProjectId]);
-  const changeArea = (next: Area) => { if (next !== area && !confirmGraphNavigation()) return; setArea(next); setLog(null); setCreating(false); };
+  }, [activeProjectId, reviewNavigation]);
+  const changeArea = (next: Area) => {
+    if (next !== area && !confirmGraphNavigation()) return;
+    reviewNavigation.invalidate();
+    setArea(next);
+    setLog(null);
+    setCreating(false);
+  };
 
   const ticketCards = new Map(tickets.map(t => [t.id, <article key={t.id} style={ticketColor(t.id)} data-ticket-id={t.id} data-done={t.status === "done" || undefined} draggable={ticketView === "board" && !busy && !movingTickets.has(t.id)} onDragStart={e => { e.dataTransfer.setData("application/x-gantry-ticket", t.id); e.dataTransfer.effectAllowed = "move"; setDragging(t.id); }} onDragEnd={() => { setDragging(null); setDropColumn(null); }} className={cn("gantry-ticket rounded-lg border", selected === t.id && "gantry-ticket-selected", dragging === t.id && "opacity-50")}>
                   <button onClick={() => openTicket(t.id)} className="flex w-full flex-col gap-3 p-3 text-left focus-visible:outline-2 focus-visible:outline-ring" aria-pressed={selected === t.id}>
@@ -267,6 +285,7 @@ export function GantryWorkspace() {
               title={p.workspace}
               onClick={() => {
                 if (current || !confirmGraphNavigation()) return;
+                reviewNavigation.invalidate();
                 setReviewSpace(null);
                 setArea("tickets");
                 setProjectId(p.id);
@@ -345,10 +364,21 @@ export function GantryWorkspace() {
           <div className="min-w-0 flex-1"><h1 className="text-xl font-semibold">{area === "tickets" ? "Tickets" : "Ready for review"}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{area === "tickets" ? "Create a worktree, build the feature, and open a pull request." : "Review related pull requests together."}</p></div>
           {area === "tickets" && <div role="group" aria-label="Ticket view" className="flex rounded-lg border p-1">
-            {(["board", "graph"] as const).map(view => <Button key={view} size="sm" variant={ticketView === view ? "secondary" : "ghost"} aria-pressed={ticketView === view} onClick={() => { setTicketView(view); localStorage.setItem("gantry-ticket-view", view); }}>{view === "board" ? <LayoutListIcon /> : <NetworkIcon />}{view === "board" ? "Board" : "Graph"}</Button>)}
+            {(["board", "graph"] as const).map(view => <Button key={view} size="sm" variant={ticketView === view ? "secondary" : "ghost"} aria-pressed={ticketView === view} onClick={() => {
+              reviewNavigation.invalidate();
+              setTicketView(view);
+              localStorage.setItem("gantry-ticket-view", view);
+            }}>{view === "board" ? <LayoutListIcon /> : <NetworkIcon />}{view === "board" ? "Board" : "Graph"}</Button>)}
           </div>}
           <Button variant="outline" disabled={busy} onClick={() => void refresh()} aria-label="Refresh Gantry"><RefreshCwIcon /></Button>
-          {area === "tickets" && project && <Button disabled={busy} onClick={() => { if (!confirmGraphNavigation()) return; setCreating(true); setSelected(null); setLog(null); setTicketTab("details"); }}><PlusIcon /> New ticket</Button>}
+          {area === "tickets" && project && <Button disabled={busy} onClick={() => {
+            if (!confirmGraphNavigation()) return;
+            reviewNavigation.invalidate();
+            setCreating(true);
+            setSelected(null);
+            setLog(null);
+            setTicketTab("details");
+          }}><PlusIcon /> New ticket</Button>}
           {area === "reviews" && project && <Button variant="outline" disabled={busy} onClick={() => void act(() => gantry.refreshProject(project.id), "Remote sync queued")}><RefreshCwIcon /> Sync remote</Button>}
         </div>}
         {error && <div role="alert" className="border-b bg-destructive/5 px-6 py-3 text-sm text-destructive">{error} {data && "Showing the last loaded state."}</div>}

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../desktop/src/lib/client/api';
-import { openWorkspaceReview, selectedWorkspaceId } from '../desktop/src/lib/client/workspace-navigation';
+import { createWorkspaceReviewNavigation, openWorkspaceReview, selectedWorkspaceId } from '../desktop/src/lib/client/workspace-navigation';
 import type { Space } from '../desktop/src/lib/types';
 
 afterEach(() => vi.restoreAllMocks());
@@ -72,5 +72,58 @@ describe('workspace selection transitions', () => {
     expect(selectedWorkspaceId(projects, [], 'first', null)).toBe('first');
     expect(selectedWorkspaceId([{ id: 'first' }], [], 'owner', null)).toBe('first');
     expect(selectedWorkspaceId([], [], 'owner', null)).toBe('owner');
+  });
+});
+
+describe('pending review navigation', () => {
+  it.each([undefined, 'ticket-space'])('does not reopen an old review after navigating away and back (ticket space: %j)', async ticketSpace => {
+    const navigation = createWorkspaceReviewNavigation();
+    vi.spyOn(api, 'createSpace').mockResolvedValue(space('unlinked-space'));
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const add = vi.spyOn(api, 'addToSpace').mockImplementation(async (url, id) => {
+      await pending;
+      return { space: space(id!), id: url, file: null };
+    });
+    const request = navigation.open(['https://github.com/local/repo/pull/1'], 'First workspace', ticketSpace);
+    // Let unlinked-space creation finish so the add request is in flight.
+    await vi.waitFor(() => expect(add).toHaveBeenCalledTimes(1));
+
+    // Workspace A -> B -> A still represents a newer navigation intent.
+    navigation.invalidate();
+    navigation.invalidate();
+    finish();
+
+    expect(await request).toBeUndefined();
+    expect(add).toHaveBeenCalledWith('https://github.com/local/repo/pull/1', ticketSpace ?? 'unlinked-space');
+  });
+
+  it('invalidates navigation while space creation is pending, without losing the saved PR group', async () => {
+    const navigation = createWorkspaceReviewNavigation();
+    let finish!: (value: Space) => void;
+    vi.spyOn(api, 'createSpace').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const add = vi.spyOn(api, 'addToSpace').mockImplementation(async (url, id) => ({ space: space(id!), id: url, file: null }));
+    const request = navigation.open(['https://github.com/local/frontend/pull/1', 'https://github.com/local/backend/pull/2'], 'First workspace');
+
+    // A view change or component unmount cancels navigation, not persistence.
+    navigation.invalidate();
+    finish(space('created-space'));
+
+    expect(await request).toBeUndefined();
+    expect(add.mock.calls.map(call => call[1])).toEqual(['created-space', 'created-space']);
+  });
+
+  it('allows the latest request to navigate and ignores an older response arriving later', async () => {
+    const navigation = createWorkspaceReviewNavigation();
+    let finish!: () => void;
+    vi.spyOn(api, 'addToSpace').mockImplementation(async (url, id) => {
+      await new Promise<void>(resolve => { finish = resolve; });
+      return { space: space(id!), id: url, file: null };
+    });
+    const older = navigation.open(['https://github.com/local/repo/pull/1'], 'First workspace', 'older-space');
+
+    expect(await navigation.open([], 'Second workspace', 'latest-space')).toBe('latest-space');
+    finish();
+    expect(await older).toBeUndefined();
   });
 });
