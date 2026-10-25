@@ -118,7 +118,7 @@ async function createFixtureWorkspace(): Promise<{ workspace: string; dataDir: s
       '  name: Fixture',
       '  defaultAgent: fake',
       '  branchPrefix: codex',
-      '  portBase: 21000',
+      '  portBase: 24000',
       '  portRange: 500',
       'repositories:',
       '  - id: frontend',
@@ -185,6 +185,15 @@ describe('full fixture lifecycle', () => {
     const { workspace, dataDir } = await createFixtureWorkspace();
     const app = makeApp(dataDir);
     cleanups.push(async () => {
+      app.jobs.stop();
+      await until(async () => {
+        try {
+          return await app.supervisor.withIdleProject('fixture', async () => true);
+        } catch (error) {
+          if ((error as { statusCode?: number }).statusCode === 409) return false;
+          throw error;
+        }
+      }, 20_000, 'discovery finishes before closing the fixture database');
       for (const row of app.db.prepare('SELECT pid, pgid FROM runs WHERE pid IS NOT NULL').all() as { pid: number; pgid: number | null }[]) {
         if (row.pgid) await killGroup(row.pgid, row.pid);
       }
@@ -265,6 +274,9 @@ describe('full fixture lifecycle', () => {
     }, 10_000, 'backend reloads imported source on the same port');
     const frontendAfter = app.db.prepare("SELECT pid FROM preview_services WHERE preview_id=? AND service_id='frontend'").get(primary.id) as { pid: number };
     assert.equal(frontendAfter.pid, frontendBefore.pid, 'source reload leaves frontend running');
+    // The HTTP listener can be ready before Node's watch parent has processed
+    // the restarted child's dependency subscriptions.
+    await delay(1000);
     await write(validator, 'module.exports = true;');
     await until(async () => {
       try { return (await (await fetch(`http://127.0.0.1:${backendPort}/health`)).json() as {ok:boolean}).ok === true; }
