@@ -13,6 +13,11 @@ interface Message {
   error?: string;
 }
 
+interface AudioTarget {
+  active: TicketView[];
+  selectedId: string;
+}
+
 async function request(url: string, body: unknown) {
   const response = await fetch(url, {
     method: 'POST',
@@ -34,6 +39,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [recording, setRecording] = useState(false);
+  const [audioPending, setAudioPending] = useState(false);
   const [ambient, setAmbient] = useState(false);
   const [speak, setSpeak] = useState(false);
   const [settings, setSettings] = useState({ transcriptionUrl: '', model: 'parakeet' });
@@ -48,6 +54,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
   const answeringMaster = useRef(false);
   const capturing = useRef(false);
   const audioGeneration = useRef(0);
+  const audioRequest = useRef<AbortController | null>(null);
   const finishSpeech = useRef<(() => void) | null>(null);
   const current = useRef({ active, selectedId, speak });
   useEffect(() => {
@@ -57,6 +64,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
 
   function stopListening() {
     audioGeneration.current++;
+    audioRequest.current?.abort();
     listening.current = false;
     setAmbient(false);
     if (timer.current) clearTimeout(timer.current);
@@ -85,6 +93,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
     const hide = () => {
       if (document.hidden) {
         audioGeneration.current++;
+        audioRequest.current?.abort();
         listening.current = false;
         setAmbient(false);
         if (timer.current) clearTimeout(timer.current);
@@ -100,6 +109,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
     return () => {
       alive.current = false;
       invalidateAudio();
+      audioRequest.current?.abort();
       listening.current = false;
       if (timer.current) clearTimeout(timer.current);
       microphone.current?.getTracks().forEach((track) => track.stop());
@@ -176,7 +186,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
     });
   }
 
-  async function send(value: string, background = false) {
+  async function send(value: string, background = false, audioTarget?: AudioTarget) {
     if (answering.current || !value.trim()) return;
     const workspaceCommand = workspaceVoiceCommand(value);
     if (workspaceCommand && (!background || /^hey gantry\b/i.test(value.trim()))) {
@@ -184,8 +194,12 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
       else await controlEveryone(workspaceCommand);
       return;
     }
-    const routed = routeVoice(value, current.current.active, current.current.selectedId, background);
+    const target = audioTarget ?? current.current;
+    const routed = routeVoice(value, target.active, target.selectedId, background);
     if (!routed || !routed.ticketId) return;
+    if (!current.current.active.some((ticket) => ticket.id === routed.ticketId)) {
+      throw new Error('The recorded ticket is no longer in progress. Select a ticket and record again.');
+    }
     answering.current = true;
     answeringMaster.current = true;
     audioGeneration.current++;
@@ -213,72 +227,95 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
   async function record(background = false) {
     if (answering.current || capturing.current || document.hidden || !alive.current) return;
     capturing.current = true;
+    setAudioPending(true);
     const version = audioGeneration.current;
+    const target: AudioTarget = { active: [...current.current.active], selectedId: current.current.selectedId };
+    const controller = new AbortController();
+    audioRequest.current = controller;
+    let stream: MediaStream | undefined;
+    let capture: MediaRecorder | undefined;
+    let captureTimer: ReturnType<typeof setTimeout> | undefined;
+    let released = false;
+
+    const valid = () =>
+      alive.current && !document.hidden && version === audioGeneration.current && !controller.signal.aborted && (!background || listening.current);
+
+    const release = () => {
+      if (released) return;
+      released = true;
+      stream?.getTracks().forEach((track) => track.stop());
+      if (microphone.current === stream) microphone.current = null;
+      if (recorder.current === capture) recorder.current = null;
+      if (captureTimer) clearTimeout(captureTimer);
+      if (timer.current === captureTimer) timer.current = null;
+      if (audioRequest.current === controller) audioRequest.current = null;
+      capturing.current = false;
+      if (alive.current) {
+        setRecording(false);
+        setAudioPending(false);
+        if (listening.current && !answering.current) void record(true);
+      }
+    };
+
     window.speechSynthesis?.cancel();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!alive.current || document.hidden || version !== audioGeneration.current || (background && !listening.current)) {
-        stream.getTracks().forEach((track) => track.stop());
-        capturing.current = false;
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!valid()) {
+        release();
         return;
       }
       microphone.current = stream;
-      const capture = new MediaRecorder(stream);
+      capture = new MediaRecorder(stream);
       recorder.current = capture;
       const chunks: Blob[] = [];
       capture.ondataavailable = (event) => {
         if (event.data.size) chunks.push(event.data);
       };
       capture.onstop = () => {
-        stream.getTracks().forEach((track) => track.stop());
-        microphone.current = null;
-        if (timer.current) clearTimeout(timer.current);
-        if (!alive.current) {
-          capturing.current = false;
+        stream?.getTracks().forEach((track) => track.stop());
+        if (captureTimer) clearTimeout(captureTimer);
+        if (!valid()) {
+          release();
           return;
         }
         setRecording(false);
-        if (document.hidden || version !== audioGeneration.current || (background && !listening.current)) {
-          capturing.current = false;
-          return;
-        }
+        let dispatched = false;
         void (async () => {
           const form = new FormData();
-          form.set('file', new Blob(chunks, { type: capture.mimeType }), 'speech.webm');
-          const response = await fetch('/api/voice', { method: 'POST', body: form });
+          form.set('file', new Blob(chunks, { type: capture!.mimeType }), 'speech.webm');
+          const response = await fetch('/api/voice', { method: 'POST', body: form, signal: controller.signal });
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || 'Transcription failed.');
-          if (!alive.current || document.hidden || version !== audioGeneration.current || (background && !listening.current)) {
-            capturing.current = false;
-            return;
-          }
+          if (!valid()) return;
           if (result.text) {
             setText(result.text);
-            await send(result.text, background);
+            dispatched = true;
+            await send(result.text, background, target);
           }
-          capturing.current = false;
-          if (background && listening.current) await record(true);
-        })().catch((error) => {
-          capturing.current = false;
-          if (alive.current) {
-            setError(error.message);
-            stopListening();
-          }
-        });
+        })()
+          .catch((error) => {
+            if (valid() || (dispatched && alive.current && !document.hidden && !controller.signal.aborted)) {
+              setError(error.message);
+              stopListening();
+            }
+          })
+          .finally(release);
       };
       capture.start();
       setRecording(true);
-      timer.current = setTimeout(
+      captureTimer = setTimeout(
         () => {
-          if (capture.state === 'recording') capture.stop();
+          if (capture?.state === 'recording') capture.stop();
         },
         background ? 6000 : 30000,
       );
+      timer.current = captureTimer;
     } catch (error) {
-      capturing.current = false;
-      microphone.current?.getTracks().forEach((track) => track.stop());
-      setError((error as Error).message);
-      stopListening();
+      if (valid()) {
+        setError((error as Error).message);
+        stopListening();
+      }
+      release();
     }
   }
 
@@ -286,6 +323,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
     answering.current = true;
     setBusy(true);
     audioGeneration.current++;
+    audioRequest.current?.abort();
     if (recorder.current?.state === 'recording') recorder.current.stop();
     try {
       const fresh = await gantry.status();
@@ -308,6 +346,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
     answering.current = true;
     setBusy(true);
     audioGeneration.current++;
+    audioRequest.current?.abort();
     if (recorder.current?.state === 'recording') recorder.current.stop();
     try {
       const results: string[] = [];
@@ -340,7 +379,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
           aria-label="Ticket assistant"
           value={selectedId}
           onChange={(event) => setSelected(event.target.value)}
-          disabled={busy || ambient}
+          disabled={busy || ambient || audioPending}
           className="max-w-96 rounded-lg border bg-background p-2 text-sm"
         >
           {active.map((ticket) => (
@@ -410,16 +449,16 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="Hey Maya, pause the workflow and tell me what’s blocked…"
-          disabled={!owner || busy}
+          disabled={!owner || busy || audioPending}
           className="min-h-16"
         />
-        <Button type="submit" disabled={!owner || busy || !text.trim()}>
+        <Button type="submit" disabled={!owner || busy || audioPending || !text.trim()}>
           Send
         </Button>
         <Button
           type="button"
           variant="outline"
-          disabled={!owner || busy || !configured || ambient}
+          disabled={!owner || busy || !configured || ambient || (audioPending && !recording)}
           onClick={() => (recording ? recorder.current?.stop() : void record())}
         >
           {recording ? 'Finish recording' : 'Talk'}
@@ -427,7 +466,7 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
         <Button
           type="button"
           variant={ambient ? 'default' : 'outline'}
-          disabled={!owner || (!ambient && (busy || !configured))}
+          disabled={!owner || (!ambient && (busy || !configured || audioPending))}
           onClick={() => {
             if (ambient) stopListening();
             else {
@@ -456,7 +495,9 @@ export function VoiceConsole({ tickets, refresh }: { tickets: TicketView[]; refr
             ? 'Listening paused while transcribing or answering'
             : busy
               ? 'Assistant is answering…'
-              : 'Microphone off'}
+              : audioPending
+                ? 'Preparing microphone or transcribing locally…'
+                : 'Microphone off'}
       </p>
       {error && (
         <p role="alert" className="text-sm text-destructive">

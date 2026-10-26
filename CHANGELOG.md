@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Keep pending voice clips bound to their original ticket, serialize recording-mode transitions, and persist collision-free assistant names for legacy tickets.
 - Let the graph assistant repair incomplete automatic graph drafts, including disconnected nodes and missing start nodes, while requiring fully valid replacement graphs.
 - Preserve in-progress PR review replies when a delayed local-worktree refresh arrives.
 

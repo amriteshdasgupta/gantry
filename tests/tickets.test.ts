@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openDatabase } from '../packages/server/src/db/db.js';
 import { TicketStore, TicketError, validateTicketInput, type TicketRow } from '../packages/server/src/tickets/store.js';
+import { assistantNameFor } from '../packages/shared/src/assistant-name.js';
 
 const cleanups: (() => Promise<void>)[] = [];
 afterAll(async () => {
@@ -24,6 +25,50 @@ async function makeStore(): Promise<{ store: TicketStore; db: Awaited<ReturnType
 }
 
 const SCOPES = ['both', 'frontend', 'backend', 'operations', 'data', 'testing'];
+
+describe('legacy assistant names', () => {
+  test('reserves colliding names across the workspace, honoring custom names and persisting every assignment', async () => {
+    const seen = new Map<string, string>();
+    let ids: string[] = [];
+    for (let index = 0; index <= 256; index++) {
+      const id = `legacy-${index}`;
+      const name = assistantNameFor(id);
+      const previous = seen.get(name);
+      if (previous) { ids = [previous, id]; break; }
+      seen.set(name, id);
+    }
+    assert.equal(ids.length, 2, 'the finite name pool has a collision');
+
+    const assignments: string[][] = [];
+    for (const reverse of [false, true]) {
+      const { store, db } = await makeStore();
+      const custom = store.create('proj', { title: 'Custom' }, SCOPES, 'codex');
+      const reserved = assistantNameFor(ids[0]!).toUpperCase();
+      db.prepare('UPDATE tickets SET assistant_name=? WHERE id=?').run(reserved, custom.id);
+
+      for (const id of reverse ? [...ids].reverse() : ids) {
+        db.prepare(`INSERT INTO tickets (id, project_id, title, description, status, scope, branch, position, created_at, updated_at)
+          VALUES (?, 'proj', 'Legacy', '', 'in_progress', 'both', ?, 0, '2026-01-01', '2026-01-01')`).run(id, `ticket/${id}`);
+      }
+
+      // A direct workspace lookup must reserve the same names as the board's list lookup.
+      if (reverse) store.get(ids[1]!);
+      else store.all('proj');
+      const names = ids.map(id => store.get(id)!.assistant_name!);
+      assert.equal(new Set([...names, reserved].map(name => name.toLowerCase())).size, 3);
+      assert.equal(store.get(custom.id)!.assistant_name, reserved);
+      for (const [index, id] of ids.entries()) {
+        assert.equal(db.prepare('SELECT assistant_name FROM tickets WHERE id=?').get(id)?.assistant_name, names[index]);
+        assert.equal(new TicketStore(db).get(id)!.assistant_name, names[index]);
+      }
+      assert.throws(() => store.update(ids[0]!, { title: 'Legacy', assistantName: names[1] }, SCOPES, 'codex'), /already uses/);
+      store.remove(ids[0]!);
+      assert.equal(store.get(ids[1]!)!.assistant_name, names[1], 'removing a collision peer does not rename the survivor');
+      assignments.push(names);
+    }
+    assert.deepEqual(assignments[0], assignments[1], 'query and insertion order do not decide the names');
+  });
+});
 
 describe('TicketStore.create', () => {
   test('assistant names persist through title changes and can be renamed without ambiguity', async () => {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
@@ -7,6 +7,66 @@ import { spawn } from 'node:child_process';
 const home = path.resolve('e2e/.tmp/home');
 const masterFile = path.join(home, 'ticket-conversations/master/ticket-1.json');
 const runFile = path.join(home, 'workflow-runs/ticket-1.json');
+
+async function mockRecording(page: Page, deferPermission = false) {
+  await page.addInitScript((defer) => {
+    let grant: (() => void) | undefined;
+    const recordings: { stop: () => void }[] = [];
+    const fixture = {
+      started: 0,
+      stoppedTracks: 0,
+      finish: () => recordings.at(-1)?.stop(),
+      grant: () => grant?.(),
+    };
+    Object.defineProperty(window, 'voiceReview', { value: fixture });
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: async () => {
+          if (defer) {
+            defer = false;
+            await new Promise<void>((resolve) => {
+              grant = resolve;
+            });
+          }
+          return {
+            getTracks: () => [
+              {
+                stop: () => {
+                  fixture.stoppedTracks++;
+                },
+              },
+            ],
+          };
+        },
+      },
+    });
+    Object.defineProperty(window, 'MediaRecorder', {
+      value: class {
+        state = 'inactive';
+        mimeType = 'audio/webm';
+        ondataavailable: ((event: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+
+        start() {
+          this.state = 'recording';
+          fixture.started++;
+          recordings.push(this);
+        }
+
+        stop() {
+          if (this.state !== 'recording') return;
+          this.state = 'inactive';
+          this.ondataavailable?.({ data: new Blob(['fixture audio'], { type: this.mimeType }) });
+          setTimeout(() => this.onstop?.(), 0);
+        }
+      },
+    });
+  }, deferPermission);
+}
+
+async function finishRecording(page: Page) {
+  await page.evaluate(() => (window as unknown as { voiceReview: { finish: () => void } }).voiceReview.finish());
+}
 
 for (const kind of ['codex', 'opencode'] as const) {
   test(`${kind} master replies retain their checkout-scoped session on follow-up`, async ({ request }) => {
@@ -233,4 +293,137 @@ test('microphone input routes a local transcript, uses a local speaking voice, a
   const beforeClose = (await state()).stoppedTracks;
   await page.getByRole('button', { name: 'Voice control', exact: true }).click();
   await expect.poll(async () => (await state()).stoppedTracks).toBeGreaterThan(beforeClose);
+});
+
+for (const removeOriginal of [false, true]) {
+  test(`pending audio ${removeOriginal ? 'is discarded when its ticket leaves progress' : 'keeps its original ticket when the list changes'}`, async ({
+    page,
+    request,
+  }) => {
+    await mockRecording(page);
+    await request.post('/api/voice', { data: { action: 'save', transcriptionUrl: 'http://127.0.0.1:9999/transcribe', model: 'parakeet' } });
+    const status = await (await request.get('/api/gantry/api/status')).json();
+    const original = status.tickets[0];
+    const other = { ...original, id: 'ticket-2', title: 'Other ticket', assistantName: 'Theo Ellis', execution: undefined };
+    let visibleTickets = [original, other];
+    await page.route('**/api/gantry/api/status', (route) => route.fulfill({ json: { ...status, tickets: visibleTickets } }));
+    const sent: { ticketId: string; text: string }[] = [];
+    await page.route('**/api/ticket-chat', (route) => {
+      const body = route.request().postDataJSON();
+      if (body.action === 'send-master') sent.push(body);
+      return route.fulfill({ json: { messages: body.action === 'send-master' ? [{ role: 'assistant', text: 'Paused.' }] : [], busy: false } });
+    });
+    let release!: () => void;
+    const transcriptReady = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let transcribing = false;
+    await page.route('**/api/voice', async (route) => {
+      if (!route.request().headers()['content-type']?.startsWith('multipart/form-data')) return route.continue();
+      transcribing = true;
+      await transcriptReady;
+      await route.fulfill({ json: { text: 'Pause the workflow' } });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Voice control', exact: true }).click();
+    const console = page.getByRole('region', { name: 'Workspace voice control' });
+    const selector = console.getByRole('combobox', { name: 'Ticket assistant' });
+    await expect(selector).toHaveValue('ticket-1');
+    await console.getByRole('button', { name: 'Talk', exact: true }).click();
+    await expect(selector).toBeDisabled();
+    await console.getByRole('button', { name: 'Finish recording' }).click();
+    await expect.poll(() => transcribing).toBe(true);
+    await expect(selector).toBeDisabled();
+
+    // The selected fallback can change during a refresh even while its control is disabled.
+    visibleTickets = removeOriginal ? [other] : [other, original];
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(selector).toHaveValue('ticket-2');
+    release();
+
+    if (removeOriginal) {
+      await expect(console.getByRole('alert')).toContainText('recorded ticket is no longer in progress');
+      expect(sent).toEqual([]);
+      await expect(selector).toHaveValue('ticket-2');
+    } else {
+      await expect.poll(() => sent.length).toBe(1);
+      expect(sent[0]).toMatchObject({ ticketId: 'ticket-1', text: 'Pause the workflow' });
+    }
+    await expect(console.getByRole('button', { name: 'Talk', exact: true })).toBeEnabled();
+  });
+}
+
+test('recording modes serialize permission and transcription, then recover after cancelling ambient audio', async ({ page, request }) => {
+  await mockRecording(page, true);
+  await request.post('/api/voice', { data: { action: 'save', transcriptionUrl: 'http://127.0.0.1:9999/transcribe', model: 'parakeet' } });
+  let uploads = 0;
+  let releaseAmbient!: () => void;
+  const ambientReady = new Promise<void>((resolve) => {
+    releaseAmbient = resolve;
+  });
+  let releaseTalk!: () => void;
+  const talkReady = new Promise<void>((resolve) => {
+    releaseTalk = resolve;
+  });
+  await page.route('**/api/voice', async (route) => {
+    if (!route.request().headers()['content-type']?.startsWith('multipart/form-data')) return route.continue();
+    uploads++;
+    await (uploads === 1 ? talkReady : ambientReady);
+    await route.fulfill({ json: { text: '' } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Voice control', exact: true }).click();
+  const console = page.getByRole('region', { name: 'Workspace voice control' });
+  const listen = console.getByRole('button', { name: 'Listen for names' });
+  const talk = console.getByRole('button', { name: 'Talk', exact: true });
+  await talk.click();
+  await expect(listen).toBeDisabled();
+  await page.evaluate(() => (window as unknown as { voiceReview: { grant: () => void } }).voiceReview.grant());
+  await expect(console.getByRole('status')).toContainText('Microphone on');
+  await expect(listen).toBeDisabled();
+  await console.getByRole('button', { name: 'Finish recording' }).click();
+  await expect.poll(() => uploads).toBe(1);
+  await expect(listen).toBeDisabled();
+  releaseTalk();
+  await expect(listen).toBeEnabled();
+  await listen.click();
+  await expect(console.getByRole('status')).toContainText('Microphone on');
+  await finishRecording(page);
+  await expect.poll(() => uploads).toBe(2);
+  await console.getByRole('button', { name: 'Stop listening' }).click();
+  await expect(talk).toBeEnabled();
+  await talk.click();
+  await expect(console.getByRole('status')).toContainText('Microphone on');
+  releaseAmbient();
+  // A late result from the cancelled mode must not clear or restart the new recording.
+  await expect.poll(() => page.evaluate(() => (window as unknown as { voiceReview: { started: number } }).voiceReview.started)).toBe(3);
+  await expect(console.getByRole('button', { name: 'Finish recording' })).toBeEnabled();
+  await expect(console.getByRole('status')).toContainText('Microphone on');
+  await finishRecording(page);
+  await expect(listen).toBeEnabled();
+  await listen.click();
+  await expect(console.getByRole('status')).toContainText('Microphone on');
+  await finishRecording(page);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { voiceReview: { started: number } }).voiceReview.started)).toBe(5);
+  await expect(console.getByRole('status')).toContainText('Microphone on');
+  await page.getByRole('button', { name: 'Voice control', exact: true }).click();
+});
+
+test('stopping name listening while microphone permission is pending allows a fresh recording after permission settles', async ({ page, request }) => {
+  await mockRecording(page, true);
+  await request.post('/api/voice', { data: { action: 'save', transcriptionUrl: 'http://127.0.0.1:9999/transcribe', model: 'parakeet' } });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Voice control', exact: true }).click();
+  const console = page.getByRole('region', { name: 'Workspace voice control' });
+  const talk = console.getByRole('button', { name: 'Talk', exact: true });
+  await console.getByRole('button', { name: 'Listen for names' }).click();
+  await console.getByRole('button', { name: 'Stop listening' }).click();
+  await expect(talk).toBeDisabled();
+  await page.evaluate(() => (window as unknown as { voiceReview: { grant: () => void } }).voiceReview.grant());
+  await expect(talk).toBeEnabled();
+  await talk.click();
+  await expect(console.getByRole('status')).toContainText('Microphone on');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { voiceReview: { started: number } }).voiceReview.started)).toBe(1);
+  await page.getByRole('button', { name: 'Voice control', exact: true }).click();
 });
