@@ -26,6 +26,21 @@ async function makeStore(): Promise<{ store: TicketStore; db: Awaited<ReturnType
 const SCOPES = ['both', 'frontend', 'backend', 'operations', 'data', 'testing'];
 
 describe('TicketStore.create', () => {
+  test('assistant names persist through title changes and can be renamed without ambiguity', async () => {
+    const { store, db } = await makeStore();
+    const first = store.create('proj', { title: 'First' }, SCOPES, 'codex');
+    assert.match(first.assistant_name!, /^[A-Za-z]+ [A-Za-z]+/);
+    assert.equal(db.prepare('SELECT assistant_name FROM tickets WHERE id=?').get(first.id)?.assistant_name, first.assistant_name);
+    assert.equal(store.update(first.id, { title: 'New title' }, SCOPES, 'codex').assistant_name, first.assistant_name);
+    const renamed = store.update(first.id, { title: 'New title', assistantName: 'Maya Reed' }, SCOPES, 'codex');
+    assert.equal(renamed.assistant_name, 'Maya Reed');
+    assert.throws(() => store.create('proj', { title: 'Second', assistantName: 'maya reed' }, SCOPES, 'codex'), /already uses/);
+    assert.throws(() => store.update(first.id, { title: 'New title', assistantName: 'Hey! 42' }, SCOPES, 'codex'), /Assistant name/);
+    assert.throws(() => store.update(first.id, { title: 'New title', assistantName: 'Gantry' }, SCOPES, 'codex'), /reserved/);
+    db.prepare('UPDATE tickets SET assistant_name=NULL WHERE id=?').run(first.id);
+    assert.equal(store.get(first.id)?.assistant_name, first.assistant_name, 'legacy tickets get stable names from their IDs');
+  });
+
   test('derives the branch from the title with the project prefix', async () => {
     const { store } = await makeStore();
     const ticket = store.create('proj', { title: 'Fix exam timer!' }, SCOPES, 'codex');

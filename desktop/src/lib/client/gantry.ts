@@ -50,6 +50,7 @@ export interface TicketView {
   projectId: string;
   title: string;
   description: string;
+  assistantName?: string;
   status: string;
   scope: string;
   scopes: string[];
@@ -201,7 +202,7 @@ export const gantry = {
   refreshProject: (projectId: string): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}/refresh`, 'POST', {}),
   createTicket: (projectId: string, input: { title: string; description?: string; scope?: string; scopes?: string[]; branch?: string; additions?: string | null; workflowTemplateId?: string; graph?: Workflow }): Promise<TicketView> =>
     request(`/api/projects/${projectId}/tickets`, 'POST', input),
-  updateTicket: (ticketId: string, input: { title?: string; description?: string; status?: string; scope?: string; scopes?: string[]; branch?: string; additions?: string | null }): Promise<TicketView> =>
+  updateTicket: (ticketId: string, input: { title?: string; assistantName?: string; description?: string; status?: string; scope?: string; scopes?: string[]; branch?: string; additions?: string | null }): Promise<TicketView> =>
     request(`/api/tickets/${ticketId}/update`, 'POST', input),
   setTicketOutcome: (ticketId: string, outcome: string): Promise<TicketView> =>
     request(`/api/tickets/${ticketId}/outcome`, 'POST', { outcome }),

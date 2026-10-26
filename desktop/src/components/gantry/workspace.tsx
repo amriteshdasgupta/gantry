@@ -31,6 +31,7 @@ import { CleanupWorktreesDialog } from "./cleanup-worktrees-dialog";
 import { TicketDialog } from "./ticket-dialog";
 import { TicketConversation, ticketChatRequest, openTicketChat } from "./ticket-chat";
 import { TicketOutcome } from "./ticket-outcome";
+import { VoiceConsole } from './voice-console';
 import { confirmGraphNavigation, useGraphNavigationGuard, useUnsavedGraph } from "@/lib/client/unsaved-graph";
 
 type Area = "tickets" | "reviews" | "previews" | "workflow";
@@ -66,6 +67,7 @@ export function GantryWorkspace() {
   const [editingTicket, setEditingTicket] = useState(false);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const pendingMoves = useRef(new Set<string>());
   const [movingTickets, setMovingTickets] = useState<Set<string>>(new Set());
   const [log, setLog] = useState<{ title: string; text: string } | null>(null);
@@ -247,6 +249,7 @@ export function GantryWorkspace() {
                   <button onClick={() => openTicket(t.id)} className="flex w-full flex-col gap-3 p-3 text-left focus-visible:outline-2 focus-visible:outline-ring" aria-pressed={selected === t.id}>
                     <span className="flex w-full items-start gap-2 break-words text-sm font-semibold"><span aria-hidden="true" className="gantry-ticket-dot mt-1 size-2 shrink-0 rounded-full" /><span className="min-w-0 flex-1">{t.title}</span><TicketReviewStatus ticket={t} groups={data?.pulls ?? []} /></span>
                     <span className="flex max-w-full items-center gap-1.5 text-xs text-muted-foreground"><GitBranchIcon className="size-3 shrink-0" /><span className="truncate font-mono">{t.branch}</span></span>
+                    {t.assistantName && <span className="text-xs text-muted-foreground">Assistant · {t.assistantName}</span>}
                     <TicketPullRequests ticket={t} groups={data?.pulls ?? []} />
                     {t.workflow && <GraphStatus run={t.workflow} execution={t.execution} />}
                     {t.conversation && <span className="text-xs text-muted-foreground">Chat linked · {t.conversation.providerName}</span>}
@@ -268,8 +271,10 @@ export function GantryWorkspace() {
         Gantry
       </span>
       <div className="flex-1" /><span className="hidden text-xs text-muted-foreground sm:block" role="status">{error ? "Connection interrupted" : data ? "Connected locally" : "Connecting…"}</span>
+      <Button size="sm" variant={voiceOpen ? 'default' : 'outline'} onClick={() => setVoiceOpen(!voiceOpen)}>Voice control</Button>
       <SettingsLink /><ThemeToggle />
     </header>
+    {voiceOpen && <VoiceConsole key={project?.id || ''} tickets={tickets} refresh={refresh} />}
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
       <aside className="flex max-h-[40dvh] shrink-0 flex-col overflow-y-auto border-b bg-muted/20 md:max-h-none md:w-64 md:border-r md:border-b-0">
         <nav aria-label="Workspaces" className="space-y-2 border-b p-3">

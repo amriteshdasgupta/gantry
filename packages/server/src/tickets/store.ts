@@ -1,4 +1,4 @@
-import { newId, isValidBranchName, branchFor, newWorkflow, type Workflow } from '@gantry/shared';
+import { assistantNameFor, newId, isValidBranchName, branchFor, newWorkflow, type Workflow } from '@gantry/shared';
 import type { Database } from '../db/db.js';
 
 /**
@@ -13,6 +13,7 @@ export interface TicketRow {
   id: string;
   project_id: string;
   title: string;
+  assistant_name?: string | null;
   description: string;
   status: 'backlog' | 'in_progress' | 'done';
   scope: string;
@@ -39,6 +40,7 @@ export class TicketError extends Error {}
 
 export interface TicketInput {
   title: string;
+  assistantName?: string;
   description?: string;
   status?: string;
   scope?: string;
@@ -89,6 +91,7 @@ export class TicketStore {
   }
 
   create(projectId: string, input: TicketInput, scopes: string[], branchPrefix: string, workflow?: Workflow): TicketRow {
+    this.validateAssistantName(projectId, input.assistantName);
     const validated = validateTicketInput(input, undefined, branchPrefix);
     if (input.scopes === undefined && input.scope === undefined) validated.scopes = [...scopes];
     if (validated.scopes != null) {
@@ -118,12 +121,21 @@ export class TicketStore {
       )
       .run(ticket.id, ticket.project_id, ticket.title, ticket.description, ticket.status, ticket.scope, ticket.branch, ticket.additions, ticket.position, null, ticket.created_at, ticket.updated_at, ticket.workflow_json!, validated.scopes == null ? null : JSON.stringify(validated.scopes));
     this.db.prepare('UPDATE tickets SET position = position + 1 WHERE project_id=? AND status=? AND id != ?').run(projectId, ticket.status, ticket.id);
+
+    const usedNames = new Set(this.all(projectId).filter(other => other.id !== ticket.id).map(other => other.assistant_name!.toLowerCase()));
+    let assistantName = input.assistantName?.trim() || assistantNameFor(ticket.id);
+    for (let attempt = 1; !input.assistantName && usedNames.has(assistantName.toLowerCase()); attempt++) {
+      assistantName = `${assistantName} ${assistantNameFor(`${ticket.id}-${attempt}`).split(' ')[1]}`;
+    }
+
+    this.db.prepare('UPDATE tickets SET assistant_name=? WHERE id=?').run(assistantName, ticket.id);
     return this.get(ticket.id)!;
   }
 
   update(id: string, input: TicketInput, scopes: string[], branchPrefix: string): TicketRow {
     const previous = this.get(id);
     if (!previous) throw new TicketError('Ticket not found.');
+    this.validateAssistantName(previous.project_id, input.assistantName, id);
     const validated = validateTicketInput(input, previous, branchPrefix);
     if (input.scopes !== undefined) {
       for (const id of validated.scopes ?? []) {
@@ -133,6 +145,7 @@ export class TicketStore {
       throw new TicketError(`Unknown ticket scope "${validated.scope}".`);
     }
     const statusChanged = validated.status !== previous.status;
+    if (input.assistantName !== undefined) this.db.prepare('UPDATE tickets SET assistant_name=? WHERE id=?').run(input.assistantName.trim(), id);
     this.db
       .prepare('UPDATE tickets SET title=?, description=?, status=?, scope=?, branch=?, additions=?, updated_at=?, scopes_json=? WHERE id=?')
       .run(validated.title, validated.description, validated.status, validated.scope, validated.branch, validated.additions, new Date().toISOString(), validated.scopes == null ? null : JSON.stringify(validated.scopes), id);
@@ -150,6 +163,17 @@ export class TicketStore {
       .prepare('UPDATE tickets SET status=COALESCE(?, status), active_run_id=COALESCE(?, active_run_id), additions=COALESCE(?, additions), updated_at=? WHERE id=?')
       .run(values.status ?? null, values.active_run_id ?? null, values.additions ?? null, new Date().toISOString(), id);
     return this.get(id)!;
+  }
+
+  private validateAssistantName(projectId: string, name: unknown, exceptId?: string): void {
+    if (name === undefined) return;
+    if (typeof name !== 'string' || !/^[A-Za-z][A-Za-z '-]{1,39}$/.test(name.trim())) {
+      throw new TicketError('Assistant name must be 2–40 letters, spaces, apostrophes or hyphens.');
+    }
+    if (name.trim().toLowerCase() === 'gantry') throw new TicketError('Gantry is reserved for workspace voice commands.');
+    if (this.all(projectId).some(ticket => ticket.id !== exceptId && ticket.assistant_name?.toLowerCase() === name.trim().toLowerCase())) {
+      throw new TicketError('Another ticket in this workspace already uses that assistant name.');
+    }
   }
 
   /** Set or clear a ticket's final notes. Kept apart from update() so stages can write it without touching other fields. */
@@ -226,5 +250,5 @@ export class TicketStore {
 }
 
 function readTicketScopes(row: TicketRow): TicketRow {
-  return { ...row, scopes: row.scopes_json == null ? null : JSON.parse(row.scopes_json) as string[] };
+  return { ...row, assistant_name: row.assistant_name || assistantNameFor(row.id), scopes: row.scopes_json == null ? null : JSON.parse(row.scopes_json) as string[] };
 }

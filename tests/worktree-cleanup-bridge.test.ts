@@ -7,11 +7,12 @@ const mocks = await vi.hoisted(async () => {
   const previous = process.env.PR_LENS_HOME;
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gantry-cleanup-bridge-'));
   process.env.PR_LENS_HOME = home;
-  return { home, previous, active: vi.fn(), pending: vi.fn(), queued: vi.fn(), checkoutAgents: vi.fn(), reserve: vi.fn() };
+  return { home, previous, active: vi.fn(), master: vi.fn(), pending: vi.fn(), queued: vi.fn(), checkoutAgents: vi.fn(), reserve: vi.fn() };
 });
 
 vi.mock('server-only', () => ({}));
 vi.mock('../desktop/src/lib/server/workflow-executor', () => ({ executionHasWork: mocks.active }));
+vi.mock('../desktop/src/lib/server/ticket-conversations', () => ({ masterBusy: mocks.master }));
 vi.mock('../desktop/src/lib/server/chats', () => ({
   pendingFor: mocks.pending,
   queuedFor: mocks.queued,
@@ -35,6 +36,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   posts = 0;
   mocks.active.mockReturnValue(false);
+  mocks.master.mockReturnValue(false);
   mocks.pending.mockReturnValue(null);
   mocks.queued.mockReturnValue([]);
   mocks.checkoutAgents.mockReturnValue(false);
@@ -55,8 +57,9 @@ afterAll(() => {
   fs.rmSync(mocks.home, { recursive: true, force: true });
 });
 
-test.each(['workflow', 'pending', 'queued'] as const)('shared-branch %s activity blocks assessment and removal', async activity => {
+test.each(['workflow', 'master', 'pending', 'queued'] as const)('shared-branch %s activity blocks assessment and removal', async activity => {
   if (activity === 'workflow') mocks.active.mockImplementation(id => id === 'TEST_b');
+  if (activity === 'master') mocks.master.mockImplementation(id => id === 'TEST_b');
   if (activity === 'pending') mocks.pending.mockImplementation(id => id === 'ticket/TEST_b' ? {} : null);
   if (activity === 'queued') mocks.queued.mockImplementation(id => id === 'ticket/TEST_b' ? ['turn'] : []);
 

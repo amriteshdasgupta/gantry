@@ -8,6 +8,17 @@ const home = process.env.PR_LENS_HOME;
 const args = process.argv.slice(2);
 const log = (entry) => fs.appendFileSync(path.join(home, 'opencode-protocol.jsonl'), JSON.stringify(entry) + '\n');
 if (args[0] === '--version') { process.stdout.write('1.0.0-e2e\n'); process.exit(0); }
+if (args[0] === 'run') {
+  let prompt = '';
+  process.stdin.on('data', chunk => { prompt += chunk; });
+  process.stdin.on('end', () => {
+    log({ args, prompt });
+    const resumed = args.indexOf('--session');
+    const sessionID = resumed >= 0 ? args[resumed + 1] : 'ses_speaking_fixture';
+    process.stdout.write(JSON.stringify({ type: 'text', sessionID, part: { text: resumed >= 0 ? 'OpenCode following up.' : 'OpenCode here.' } }) + '\n');
+  });
+  return;
+}
 if (args[0] !== 'serve') { log({ args }); process.exit(0); }
 
 const expected = `Basic ${Buffer.from(`opencode:${process.env.OPENCODE_SERVER_PASSWORD}`).toString('base64')}`;
