@@ -5,6 +5,49 @@ import http from 'node:http';
 import { expect, test } from 'vitest';
 import { VcsStore, detectProvider, parseRemote, listGitlabPulls, listBitbucketPulls } from '../packages/server/src/discover/vcs.js';
 
+test('provider detection uses the host, not the repository name', () => {
+  expect(detectProvider('git@github.com:o/gitlab-tools.git')).toBe('github');
+  expect(detectProvider('https://github.com/o/bitbucket.org.git')).toBe('github');
+  expect(detectProvider('https://gitlab.example.com/g/r.git')).toBe('gitlab');
+});
+
+test('the GitLab token is only sent to its own host', async () => {
+  let token: string | string[] | undefined = 'unset';
+  const server = await mock((req, res) => { token = req.headers['private-token']; res.statusCode = 404; res.end('{}'); });
+  const store = new VcsStore(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vcs-')), 'v.json'));
+  store.setCredentials('gitlab', 'tok', server.url);
+  // Another host: the request goes to https://other.invalid, never to the configured server.
+  await expect(listGitlabPulls(store, 'other.invalid', 'a/b')).rejects.toThrow(/other\.invalid/);
+  expect(token).toBe('unset');
+  server.close();
+});
+
+test('a 404 without a token suggests adding one', async () => {
+  const server = await mock((_req, res) => { res.statusCode = 404; res.end('{}'); });
+  const store = new VcsStore(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vcs-')), 'v.json'));
+  store.setCredentials('gitlab', null, server.url);
+  await expect(listGitlabPulls(store, '127.0.0.1', 'a/b')).rejects.toThrow(/add a GitLab token/);
+  server.close();
+});
+
+test('lists open Bitbucket pull requests with a bearer token', async () => {
+  let seen: http.IncomingMessage | undefined;
+  const server = await mock((req, res) => {
+    seen = req;
+    res.end(JSON.stringify({ values: [{ id: 3, title: 'T', links: { html: { href: 'https://bitbucket.org/ws/app/pull-requests/3' } }, source: { branch: { name: 'feat' }, commit: { hash: 'abc' } }, author: { display_name: 'Bo' }, updated_on: 'now', draft: true }] }));
+  });
+  const store = new VcsStore(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vcs-')), 'v.json'));
+  store.setCredentials('bitbucket', 'bb', undefined);
+  const real = globalThis.fetch;
+  globalThis.fetch = ((url: string, init?: RequestInit) => real(String(url).replace('https://api.bitbucket.org', server.url), init)) as typeof fetch;
+  try {
+    const pulls = await listBitbucketPulls(store, 'ws/app');
+    expect(seen?.url).toContain('/2.0/repositories/ws/app/pullrequests');
+    expect(seen?.headers.authorization).toBe('Bearer bb');
+    expect(pulls[0]).toMatchObject({ number: 3, branch: 'feat', author: 'Bo', draft: true, blockers: ['Draft'] });
+  } finally { globalThis.fetch = real; server.close(); }
+});
+
 test('detects the provider and repository from remotes', () => {
   expect(detectProvider('git@gitlab.com:grp/sub/app.git')).toBe('gitlab');
   expect(detectProvider('https://bitbucket.org/ws/app.git')).toBe('bitbucket');
@@ -42,7 +85,7 @@ test('lists open GitLab merge requests with the saved token', async () => {
   });
   const store = new VcsStore(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vcs-')), 'v.json'));
   store.setCredentials('gitlab', 'tok', server.url);
-  const pulls = await listGitlabPulls(store, 'ignored', 'grp/app');
+  const pulls = await listGitlabPulls(store, '127.0.0.1', 'grp/app');
   server.close();
   expect(seen?.url).toContain('/api/v4/projects/grp%2Fapp/merge_requests');
   expect(seen?.headers['private-token']).toBe('tok');
@@ -53,7 +96,6 @@ test('rejected tokens produce an actionable error', async () => {
   const server = await mock((_req, res) => { res.statusCode = 401; res.end('{}'); });
   const store = new VcsStore(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vcs-')), 'v.json'));
   store.setCredentials('gitlab', 'bad', server.url);
-  await expect(listGitlabPulls(store, 'h', 'a/b')).rejects.toThrow(/rejected the token/);
+  await expect(listGitlabPulls(store, '127.0.0.1', 'a/b')).rejects.toThrow(/rejected the token/);
   server.close();
-  expect(typeof listBitbucketPulls).toBe('function');
 });

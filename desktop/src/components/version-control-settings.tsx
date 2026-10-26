@@ -51,9 +51,10 @@ export function VersionControlSettings() {
             <select
               aria-label={`Provider for ${repo.repositoryId}`}
               className="h-9 rounded-md border bg-background px-2 text-sm"
-              value={repo.provider}
-              onChange={(e) => void save({ repository: { projectId: repo.projectId, repositoryId: repo.repositoryId, provider: e.target.value as VcsProvider } }, `${repo.repositoryId} uses ${e.target.value}`)}
+              value={repo.chosen ? repo.provider : ""}
+              onChange={(e) => void save({ repository: { projectId: repo.projectId, repositoryId: repo.repositoryId, provider: (e.target.value || null) as VcsProvider | null } }, `${repo.repositoryId} ${e.target.value ? `uses ${e.target.value}` : "auto-detects its provider"}`)}
             >
+              <option value="">Auto-detect ({repo.detected})</option>
               {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </div>

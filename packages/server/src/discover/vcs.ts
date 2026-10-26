@@ -18,9 +18,11 @@ interface VcsFile {
   gitlabUrl?: string;
 }
 
+/** Decided from the remote's host only, so a GitHub repo named `gitlab-tools` stays GitHub. */
 export function detectProvider(remoteUrl: string): Provider {
-  if (/bitbucket\./i.test(remoteUrl)) return 'bitbucket';
-  if (/gitlab/i.test(remoteUrl)) return 'gitlab';
+  const host = parseRemote(remoteUrl)?.host.toLowerCase() ?? '';
+  if (/^bitbucket\./.test(host)) return 'bitbucket';
+  if (/^gitlab\./.test(host) || host.endsWith('.gitlab.com')) return 'gitlab';
   return 'github';
 }
 
@@ -89,17 +91,25 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-/** Base API origin for a provider and remote host (GitLab may be self-hosted). */
-function gitlabBase(store: VcsStore, host: string): string {
-  return store.gitlabUrl ?? `https://${host}`;
+/**
+ * GitLab API origin for a remote host. The saved token belongs to one host (the configured
+ * GitLab URL, else gitlab.com) and is never sent anywhere else.
+ */
+function gitlabTarget(store: VcsStore, host: string): { base: string; token?: string } {
+  const configured = store.gitlabUrl ? new URL(store.gitlabUrl) : null;
+  const owned = configured ? configured.hostname === host : host === 'gitlab.com';
+  return { base: owned && configured ? configured.origin : `https://${host}`, token: owned ? store.token('gitlab') : undefined };
 }
 
 export async function listGitlabPulls(store: VcsStore, host: string, slug: string): Promise<OpenPull[]> {
-  const token = store.token('gitlab');
+  const { base, token } = gitlabTarget(store, host);
   const rows = (await getJson(
-    `${gitlabBase(store, host)}/api/v4/projects/${encodeURIComponent(slug)}/merge_requests?state=opened&per_page=100`,
+    `${base}/api/v4/projects/${encodeURIComponent(slug)}/merge_requests?state=opened&per_page=100`,
     token ? { 'PRIVATE-TOKEN': token } : {},
-  )) as Json[];
+  ).catch((error: Error) => {
+    if (!token && /HTTP 404/.test(error.message)) throw new Error(`${error.message}; this may be a private project, so add a GitLab token${store.gitlabUrl ? ` for ${new URL(store.gitlabUrl).host}` : ' (and set the GitLab URL if self-hosted)'} in Settings`);
+    throw error;
+  })) as Json[];
   if (!Array.isArray(rows)) throw new Error(`GitLab returned an invalid merge request list for ${slug}`);
   return rows.map((mr) => {
     const pipeline = String(mr.head_pipeline?.status ?? '');
@@ -144,7 +154,7 @@ export async function testCredentials(store: VcsStore, provider: Provider, host?
   const token = store.token(provider);
   if (!token) throw new Error('No token saved');
   if (provider === 'gitlab') {
-    const user = (await getJson(`${gitlabBase(store, host ?? 'gitlab.com')}/api/v4/user`, { 'PRIVATE-TOKEN': token })) as Json;
+    const user = (await getJson(`${gitlabTarget(store, host ?? new URL(store.gitlabUrl ?? 'https://gitlab.com').hostname).base}/api/v4/user`, { 'PRIVATE-TOKEN': token })) as Json;
     return String(user.username);
   }
   if (provider === 'bitbucket') {

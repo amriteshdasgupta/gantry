@@ -156,7 +156,7 @@ export interface StatusView {
   tickets: TicketView[];
   previews: PreviewView[];
   pulls: PullGroupView[];
-  remote: { projectId: string; repositories: Record<string, { checkedAt: number; error: string | null }> }[];
+  remote: { projectId: string; repositories: Record<string, { checkedAt: number; error: string | null; pullError?: string | null }> }[];
   jobs: JobView[];
 }
 

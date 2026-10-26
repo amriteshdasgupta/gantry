@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ticketServiceScopes } from "@/lib/client/gantry";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 import { ArrowUpRightIcon, CheckIcon, FolderIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, Trash2Icon } from "lucide-react";
@@ -150,6 +151,7 @@ export function GantryWorkspace() {
   const ticketColor = useTicketColors(project?.id ?? "", tickets);
   const doneBranch = (branch: string) => tickets.some(t => t.branch === branch && t.status !== "in_progress");
   const previews = data?.previews.filter((p) => p.projectId === project?.id && (p.isPrimary || !doneBranch(p.branch))) ?? [];
+  const pullErrors = Object.entries(data?.remote?.find(r => r.projectId === project?.id)?.repositories ?? {}).flatMap(([key, r]) => r.pullError ? [`${key.slice(key.indexOf(":") + 1)}: ${r.pullError}`] : []);
   const pulls = data?.pulls.filter((p) => p.projectId === project?.id && !doneBranch(p.branch)) ?? [];
   const ticket = tickets.find((t) => t.id === selected);
   const previewEntries = [{ id: "main", name: "Main", preview: previews.find(p => p.isPrimary) }, ...tickets.filter(t => t.status === "in_progress").map(t => ({ id: t.id, name: t.title.replace(/^.*\//, "").replace(/-+/g, " ").trim(), preview: previews.find(p => !p.isPrimary && p.branch === t.branch) }))];
@@ -452,7 +454,7 @@ export function GantryWorkspace() {
         {project && reviewSpace && <div className={area === "reviews" ? "flex min-h-0 flex-1 flex-col" : "hidden"}><ReviewWorkspace key={reviewSpace} projectId={project.id} spaceId={reviewSpace} initialTarget={null} initialFile={null} onNavigateSpace={navigateReview} /></div>}
         {project && area === "reviews" && !reviewSpace && <div className="divide-y">{pulls.map((g) => <section key={g.id} className="space-y-4 p-6"><div className="flex flex-wrap items-center gap-3"><GitBranchIcon className="size-4 text-muted-foreground" /><h2 className="min-w-0 flex-1 break-all font-medium">{g.branch}</h2><State value={g.ready ? "ready" : "blocked"} /><Button size="sm" disabled={busy} onClick={() => void review(Object.values(g.pulls).map((p) => p.url))}>Review {Object.keys(g.pulls).length > 1 ? "together" : "PR"}<ArrowUpRightIcon /></Button></div>
           {Object.entries(g.pulls).map(([repo, p]) => <div key={repo} className="flex flex-wrap items-center gap-3 text-sm"><GitPullRequestIcon className="size-4 shrink-0 text-muted-foreground" /><button className="min-w-0 flex-1 break-words text-left hover:underline" disabled={busy} onClick={() => void review([p.url])}>{repo} #{p.number} · {p.title}</button><a href={p.url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground underline underline-offset-4">{/\/-\/merge_requests\//.test(p.url) ? "GitLab" : /bitbucket/i.test(p.url) ? "Bitbucket" : "GitHub"}</a></div>)}{g.blockers.length > 0 && <p className="text-xs text-muted-foreground">{g.blockers.join(" · ")}</p>}
-        </section>)}{!pulls.length && <p className="p-6 text-sm text-muted-foreground">No open pull requests. Sync remote to check for new reviews.</p>}</div>}
+        </section>)}{pullErrors.length > 0 && <div role="alert" className="space-y-1 p-6 text-sm text-destructive">{pullErrors.map(e => <p key={e}>{e}</p>)}<Link href="/settings" className="underline">Open Version control settings</Link></div>}{!pulls.length && !pullErrors.length && <p className="p-6 text-sm text-muted-foreground">No open pull requests. Sync remote to check for new reviews.</p>}</div>}
       </main>
     </div>
   </div>;
