@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { createAppContext, type AppContext } from './config/app.js';
 import { openDatabase, type Database } from './db/db.js';
 import { createLogger, type Logger } from './log.js';
@@ -5,6 +6,7 @@ import { GANTRY_VERSION } from './version.js';
 import { loadProject, listRegisteredWorkspaces, registerProjectRow, type LoadedProject } from './projects/registry.js';
 import { Supervisor } from './supervisor/supervisor.js';
 import { RemoteSync } from './discover/remote-sync.js';
+import { VcsStore } from './discover/vcs.js';
 import { JobQueue } from './jobs/queue.js';
 import { TicketStore } from './tickets/store.js';
 import { AgentRegistry } from './agents/registry.js';
@@ -45,7 +47,7 @@ export class GantryApp {
     this.tickets = new TicketStore(this.db);
     this.ports = new PortAllocator(this.db);
     this.jobs = new JobQueue(this.db, this.log);
-    this.remote = new RemoteSync(this.db, () => this.projects(), this.log, (branches) => this.completeTickets(branches));
+    this.remote = new RemoteSync(this.db, () => this.projects(), this.log, (branches) => this.completeTickets(branches), new VcsStore(path.join(this.ctx.dataDir, 'vcs-credentials.json')));
     this.registerJobHandlers();
   }
 

@@ -169,6 +169,9 @@ export function GantryWorkspace() {
     await act(()=>openTicketChat(owner.id));
   }
   async function review(urls: string[], owner?: TicketView) {
+    // The in-app review space reads GitHub only; GitLab/Bitbucket PRs open on their own site.
+    const external = urls.filter(url => !/^https:\/\/github\.com\//.test(url));
+    if (external.length) { external.forEach(url => window.open(url, "_blank", "noopener")); urls = urls.filter(url => !external.includes(url)); if (!urls.length) return; }
     if (!confirmGraphNavigation()) return;
     await act(async () => {
       const linked = owner ?? tickets.find(t => t.pullRequests.some(p => urls.includes(p.url)) || pulls.some(g => g.branch === t.branch && Object.values(g.pulls).some(p => urls.includes(p.url))));

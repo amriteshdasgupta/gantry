@@ -11,12 +11,13 @@ type Context = { params: Promise<{ path: string[] }> };
 const reads = [
   /^api\/projects\/[\w-]+\/(chat-prompt|workflow|workflow-templates)$/,
   /^api\/tickets\/[\w-]+\/(workflow|worktree-cleanup)$/,
-  /^api\/(status|version)$/,
+  /^api\/(status|version|vcs)$/,
   /^logs\/(run\/[\w-]+|preview\/[\w-]+\/[\w-]+)$/,
   /^artifacts\/[\w-]+\/[\w.-]+$/,
 ];
 const writes = [
   /^api\/projects$/,
+  /^api\/vcs(\/test)?$/,
   /^api\/projects\/[\w-]+\/(refresh|tickets|chat-prompt|workflow|workflow-templates)$/,
   /^api\/projects\/[\w-]+\/workflow-templates\/[\w-]+$/,
   /^api\/projects\/[\w-]+\/tickets\/reorder$/,

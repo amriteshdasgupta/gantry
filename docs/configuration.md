@@ -75,6 +75,10 @@ Existing tickets retain their legacy `scope`; unrelated edits preserve it until 
 | `role` | `product` \| `tooling` | `product` | `product` repositories join branch previews and tickets; `tooling` ones are only mounted into tickets. |
 | `instructions` | string[] | `['AGENTS.md', 'CLAUDE.md']` | Instruction file names looked up inside the repository and listed in prompts. |
 
+### Version control provider (Reviews)
+
+The Reviews page lists open pull requests from GitHub (via `gh`), GitLab (merge requests) or Bitbucket Cloud. The provider is detected from each repository's remote and can be changed in **Settings → Version control**; the choice and any API tokens are saved in `vcs-credentials.json` (mode 0600) in the Gantry data directory, not in `gantry.yaml`, and the API never returns tokens. Self-hosted GitLab needs its URL set there too. GitLab and Bitbucket pull requests open on the provider's site; in-app review, comments and merge remain GitHub-only.
+
 ## `services[]`
 
 | Key | Type | Default | Description |

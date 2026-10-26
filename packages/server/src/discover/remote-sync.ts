@@ -4,7 +4,8 @@ import type { LoadedProject } from '../projects/registry.js';
 import type { Logger } from '../log.js';
 import { syncRepository, githubCliAvailable, listOpenPulls, pullState, type RemoteSnapshot, type OpenPull } from './remote.js';
 import { mergedEvidence, matchPull, shouldRetire } from './merge-evidence.js';
-import { isGitRepository } from '../git/git.js';
+import { git, isGitRepository } from '../git/git.js';
+import { VcsStore, parseRemote, listGitlabPulls, listBitbucketPulls } from './vcs.js';
 
 /**
  * Remote synchronization (every 2 minutes and explicitly after a PR merge;
@@ -32,6 +33,8 @@ export class RemoteSync {
   private readonly snapshots = new Map<string, RemoteSnapshot>();
   private readonly openPulls = new Map<string, OpenPull[]>();
   private githubCli: boolean | null = null;
+  /** Last open-PR listing error per `projectId:repositoryId`, shown on the Reviews page. */
+  readonly pullErrors = new Map<string, string>();
   private running: Promise<void> | null = null;
   lastSyncAt = 0;
   lastError: string | null = null;
@@ -41,6 +44,7 @@ export class RemoteSync {
     private readonly projects: () => Promise<LoadedProject[]>,
     private readonly log: Logger,
     private readonly onCompleteTickets: (branches: Map<string, Set<string>>) => Promise<void>,
+    readonly vcs: VcsStore = new VcsStore(''),
   ) {}
 
   snapshotFor(projectId: string, repositoryId: string): RemoteSnapshot | null {
@@ -105,12 +109,21 @@ export class RemoteSync {
       const key = `${projectId}:${repo.id}`;
       this.snapshots.set(key, await syncRepository(this.snapshots.get(key) ?? null, repoPath, repo.remote, repo.defaultBranch));
       const snapshot = this.snapshots.get(key)!;
-      if (this.githubCli && snapshot.repository) {
-        try {
-          this.openPulls.set(key, await listOpenPulls(snapshot.repository, repoPath));
-        } catch (error) {
-          this.log.debug(`${key}: gh pr list failed: ${(error as Error).message}`);
+      const remoteUrl = await git(repoPath, 'remote', 'get-url', repo.remote).catch(() => '');
+      const provider = this.vcs.providerFor(projectId, repo.id, remoteUrl);
+      const remote = parseRemote(remoteUrl);
+      try {
+        if (provider === 'github') {
+          if (this.githubCli && snapshot.repository) this.openPulls.set(key, await listOpenPulls(snapshot.repository, repoPath));
+        } else if (!remote) {
+          throw new Error(`cannot read the ${provider} repository from remote "${remoteUrl}"`);
+        } else {
+          this.openPulls.set(key, provider === 'gitlab' ? await listGitlabPulls(this.vcs, remote.host, remote.slug) : await listBitbucketPulls(this.vcs, remote.slug));
         }
+        this.pullErrors.delete(key);
+      } catch (error) {
+        this.pullErrors.set(key, (error as Error).message);
+        this.log.debug(`${key}: ${provider} pull list failed: ${(error as Error).message}`);
       }
     }
     try {

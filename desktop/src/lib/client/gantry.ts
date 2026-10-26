@@ -183,7 +183,18 @@ export interface CleanupResult {
   assessment: CleanupAssessment;
 }
 
+export type VcsProvider = 'github' | 'gitlab' | 'bitbucket';
+export interface VcsView {
+  providers: Record<VcsProvider, { hasToken: boolean }>;
+  gitlabUrl: string;
+  repositories: { projectId: string; projectName: string; repositoryId: string; remoteUrl: string; detected: VcsProvider; provider: VcsProvider; chosen: boolean; error: string | null }[];
+}
+
 export const gantry = {
+  vcs: (): Promise<VcsView> => request('/api/vcs', 'GET'),
+  saveVcs: (input: { repository?: { projectId: string; repositoryId: string; provider: VcsProvider | null }; credentials?: { provider: VcsProvider; token?: string | null; gitlabUrl?: string | null } }): Promise<{ ok: boolean }> =>
+    request('/api/vcs', 'POST', input),
+  testVcs: (provider: VcsProvider): Promise<{ ok: boolean; user: string }> => request('/api/vcs/test', 'POST', { provider }),
   assessCleanup: (id: string): Promise<CleanupAssessment> => request(`/api/tickets/${id}/worktree-cleanup`, 'GET'),
   cleanupWorktrees: (id: string, checkouts: CleanupAssessment['checkouts']): Promise<CleanupResult> =>
     request(`/api/tickets/${id}/worktree-cleanup`, 'POST', { confirm: true, checkouts }),

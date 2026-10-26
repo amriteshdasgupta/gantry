@@ -13,6 +13,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { AgentIcon } from "@/components/agents/agent-icon";
 import { api, type TerminalLauncher } from "@/lib/client/api";
 import { agentsStore, chooseAgent, useAgents } from "@/lib/client/agents";
+import { VersionControlSettings } from "@/components/version-control-settings";
 import type { Agent, AgentKind, AgentStatus } from "@/lib/types";
 
 const KINDS: { kind: AgentKind; label: string; blurb: string }[] = [
@@ -67,6 +68,7 @@ export function Settings() {
         <ThemeToggle />
       </header>
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-10">
+        <VersionControlSettings />
         <section className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
           <p className="text-sm text-muted-foreground">
