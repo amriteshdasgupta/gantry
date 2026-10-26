@@ -80,7 +80,8 @@ export class VcsStore {
 }
 
 async function getJson(url: string, headers: Record<string, string>): Promise<unknown> {
-  const response = await fetch(url, { headers: { Accept: 'application/json', ...headers }, signal: AbortSignal.timeout(20_000) });
+  const response = await fetch(url, { headers: { Accept: 'application/json', ...headers }, signal: AbortSignal.timeout(20_000) })
+    .catch((error: Error) => { throw new Error(`could not reach ${new URL(url).host} (${(error.cause as Error | undefined)?.message ?? error.message})`); });
   if (response.status === 401 || response.status === 403) throw new Error(`${new URL(url).host} rejected the token (HTTP ${response.status}); check it in Settings`);
   if (!response.ok) throw new Error(`${new URL(url).host} returned HTTP ${response.status}`);
   return response.json();

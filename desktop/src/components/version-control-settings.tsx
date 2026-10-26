@@ -19,12 +19,9 @@ export function VersionControlSettings() {
   const [tokens, setTokens] = useState<Partial<Record<VcsProvider, string>>>({});
   const [gitlabUrl, setGitlabUrl] = useState("");
 
-  const load = useCallback(async () => {
-    const next = await gantry.vcs();
-    setView(next);
-    setGitlabUrl(next.gitlabUrl);
-  }, []);
-  useEffect(() => { load().catch((e: Error) => toast.error(e.message)); }, [load]);
+  const show = useCallback((next: VcsView) => { setView(next); setGitlabUrl(next.gitlabUrl); }, []);
+  const load = useCallback(async () => show(await gantry.vcs()), [show]);
+  useEffect(() => { gantry.vcs().then(show, (e: Error) => toast.error(e.message)); }, [show]);
 
   async function save(input: Parameters<typeof gantry.saveVcs>[0], message: string) {
     try { await gantry.saveVcs(input); await load(); toast.success(message); }

@@ -115,6 +115,7 @@ export class RemoteSync {
       try {
         if (provider === 'github') {
           if (this.githubCli && snapshot.repository) this.openPulls.set(key, await listOpenPulls(snapshot.repository, repoPath));
+          else this.openPulls.delete(key);
         } else if (!remote) {
           throw new Error(`cannot read the ${provider} repository from remote "${remoteUrl}"`);
         } else {
