@@ -13,6 +13,17 @@ import { ticketContext, type TicketWorkspace } from "./ticket-chat";
 import { summarizeExecution } from "./workflow-summary";
 import type { Execution } from "./workflow-state";
 import { openInHerdrChat, type LaunchTarget } from "./terminal-launcher";
+import { sessionOpenInTerminal } from './stage-sessions';
+
+export interface MasterMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  error?: string;
+}
+const globalMaster = globalThis as unknown as { masterTurns?: Map<string, AbortController> };
+const masterTurns = globalMaster.masterTurns ??= new Map<string, AbortController>();
+export const masterBusy = (id: string) => masterTurns.has(id);
+export const stopMaster = (id: string) => masterTurns.get(id)?.abort();
 
 const directory = path.join(HOME, "ticket-conversations");
 export interface TicketConversation {
@@ -32,6 +43,7 @@ export interface TicketConversation {
   /** The first message a new chat starts with, when it differs from the context. */
   firstMessage?: string;
   createdAt: number;
+  messages?: MasterMessage[];
 }
 const fileFor = (id: string) => {
   if (!/^[\w-]+$/.test(id)) throw httpError(400, "Invalid ticket.");
@@ -50,6 +62,7 @@ function save(record: TicketConversation) {
 function contextFor(work: TicketWorkspace) {
   return [
     `Gantry ticket: ${work.ticket.title}`, `Ticket ID: ${work.ticket.id}`, `Branch: ${work.ticket.branch}`,
+    `Your assistant name is ${work.ticket.assistant_name || 'the ticket assistant'}.`,
     work.ticket.description, work.ticket.additions || "", work.prompt || "",
     `Workspace instructions: ${path.join(work.project.workspace, "AGENTS.md")}`,
     "Prepared ticket worktrees:", ...work.checkouts.map(c => `${c.repositoryId}: ${c.path}`),
@@ -248,10 +261,12 @@ async function launch(record: TicketConversation, work: TicketWorkspace, persist
 }
 
 export async function openTicketConversation(ticketId: string, origin: string) {
+  if (masterBusy(ticketId)) throw httpError(409, 'Wait for the spoken conversation to finish before opening its terminal.');
   return withLock(`ticket-conversation:${ticketId}`, async () => {
+    if (masterBusy(ticketId)) throw httpError(409, 'The master chat is answering.');
     const { executionFor } = await import('./workflow-executor');
     const run = executionFor(ticketId);
-    if (run) return openMasterConversation(ticketId, run, origin);
+    if (run || masterConversationFor(ticketId)) return openMasterConversation(ticketId, run, origin);
     let record = conversationFor(ticketId);
     // Resolve the ticket even on resume; deleted tickets must not launch a stale record.
     const existing = await ticketContext(ticketId);
@@ -313,7 +328,7 @@ export async function openWorkflowConversation(work: TicketWorkspace, attempt: {
 // A graph ticket's master chat is kept apart from the plain ticket chat: a plain chat stops
 // automation from starting, and the master chat exists to work alongside it.
 const masterFileFor = (id: string) => path.join(directory, "master", path.basename(fileFor(id)));
-function masterConversationFor(id: string): TicketConversation | null {
+export function masterConversationFor(id: string): TicketConversation | null {
   try { return JSON.parse(fs.readFileSync(masterFileFor(id), "utf8")); }
   catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return null; throw e; }
 }
@@ -329,6 +344,7 @@ function masterContextFor(work: TicketWorkspace, run: Execution, origin: string)
   const call = (body: Record<string, string>) => `curl -sS ${api} -H 'Content-Type: application/json' --data-binary @- <<'JSON'\n${JSON.stringify({ ticketId: work.ticket.id, ...body })}\nJSON`;
   return [
     `You are the master chat for the Gantry ticket "${work.ticket.title}" (ticket ID ${work.ticket.id}, branch ${work.ticket.branch}). The ticket runs as a Gantry workflow graph: stage agents do the work one stage at a time, and the person follows it in the graph. You are the person's single conversation about this ticket. Find out where it stands, explain it plainly, and get done whatever they ask.`,
+    `Your name is ${work.ticket.assistant_name || 'the ticket assistant'}. The person may address you by name. Replies may be read aloud: lead with a brief, natural answer, then details when useful.`,
     work.ticket.description, work.ticket.additions || "",
     `Workspace instructions: ${path.join(work.project.workspace, "AGENTS.md")}`,
     "Ticket worktrees:", ...work.checkouts.map(c => `${c.repositoryId}: ${c.path}`),
@@ -344,22 +360,23 @@ function masterContextFor(work: TicketWorkspace, run: Execution, origin: string)
 }
 
 /** One conversation per graph ticket that can read the run and drive its stages. Each open refreshes its view of the graph. */
-async function openMasterConversation(ticketId: string, run: Execution, origin: string) {
+async function openMasterConversation(ticketId: string, run: Execution | null, origin: string, open = true) {
   let work = await ticketContext(ticketId);
   if (work.ticket.status !== "in_progress") throw httpError(409, "Move this ticket to In progress to open its conversation.");
   if (!work.checkouts.length) work = await ticketContext(ticketId, true);
   if (!work.checkouts[0]?.path) throw httpError(409, "This ticket has no worktrees.");
-  let record = masterConversationFor(ticketId);
+  let record = masterConversationFor(ticketId) || (!run ? conversationFor(ticketId) : null);
   if (record && record.branch !== work.ticket.branch) throw httpError(409, "This ticket is linked to a conversation on its original branch. Restore that branch to reopen the same conversation.");
   if (!record) {
-    const agent = findAgent(run.defaultProviderId) ?? getAgent();
+    const agent = (run && findAgent(run.defaultProviderId)) || getAgent();
     if (!isCliKind(agent.kind)) throw httpError(409, "The master chat runs in a coding CLI in herdr. Make Claude Code, OpenCode or Codex the default provider, or open a stage chat from the graph.");
     record = { ticketId, agentId: agent.id, provider: agent.kind, providerName: agent.name, model: agent.model, sessionId: "", cwd: work.checkouts[0].path, branch: work.ticket.branch, checkouts: work.checkouts, context: "", firstMessage: "Where does this ticket stand, and does anything need me?", createdAt: Date.now() };
   }
   // Claude takes this fresh view of the graph on every open; Codex and OpenCode keep the one their conversation was created with, and read the live state through the API.
-  record = { ...record, checkouts: work.checkouts, context: masterContextFor(work, run, origin) };
-  if (!record.sessionId) record.sessionId = await newSession(record, saveMaster);
+  record = { ...record, checkouts: work.checkouts, context: run ? masterContextFor(work, run, origin) : contextFor(work) + '\n\nYou are the ticket master assistant. Answer concisely. Do not start work unless asked.' };
+  if (open && !record.sessionId) record.sessionId = await newSession(record, saveMaster);
   saveMaster(record);
+  if (!open) return { conversation: publicConversation(record), master: true };
   if (record.provider !== "claude") {
     await launch(record, work, false);
     saveMaster(record);
@@ -373,4 +390,58 @@ async function openMasterConversation(ticketId: string, run: Execution, origin: 
   await launch(record, work, false, [...(mcp ? ["--mcp-config", mcp] : []), ...(settings ? ["--settings", settings] : [])]);
   saveMaster(record);
   return { conversation: publicConversation(record), master: true };
+}
+
+/** One writer to the same durable provider session, whether accessed by voice, text or herdr. */
+export async function sendMasterMessage(ticketId: string, text: unknown, origin: string) {
+  if (typeof text !== 'string' || !text.trim() || text.length > 8000) throw httpError(400, 'Message must contain 1–8000 characters.');
+  if (masterBusy(ticketId)) throw httpError(409, 'This assistant is already answering.');
+  const abort = new AbortController();
+  masterTurns.set(ticketId, abort);
+  try {
+    return await withLock(`ticket-conversation:${ticketId}`, async () => {
+      const { executionFor } = await import('./workflow-executor');
+      await openMasterConversation(ticketId, executionFor(ticketId), origin, false);
+      const record = masterConversationFor(ticketId)!;
+      if (record.sessionId && await sessionOpenInTerminal(record.sessionId)) throw httpError(409, 'Exit this master chat in herdr before speaking here, so its session has only one writer.');
+      const { drivers } = await import('./agents');
+      const { allowedTools, stageSettingsFile } = await import('./stage-permissions');
+      const { stageMcpConfig } = await import('./stage-mcp');
+      const work = await ticketContext(ticketId);
+      const mcpConfig = record.provider === 'claude' ? await stageMcpConfig(ticketId, record.checkouts.map(checkout => checkout.path)) : undefined;
+      const history = (record.messages ?? []).filter(message => !message.error);
+      const answer: MasterMessage = { role: 'assistant', text: '', error: 'Reply interrupted before completion.' };
+      record.messages = [...(record.messages ?? []), { role: 'user', text: text.trim() }, answer];
+      saveMaster(record);
+      const timer = setTimeout(() => abort.abort(), 5 * 60 * 1000);
+      try {
+        await drivers[record.provider]({
+          agent: { id: record.agentId, kind: record.provider, name: record.providerName, model: record.model },
+          cwd: record.cwd, system: record.context, prompt: text.trim(), sessionId: record.sessionId || null,
+          sessionDirectory: record.cwd,
+          history, signal: abort.signal,
+          workflow: { workspace: work.project.workspace, addDirs: record.checkouts.map(checkout => checkout.path), allowedTools: allowedTools(work.project.id), settings: stageSettingsFile(work.project.workspace) || undefined, mcpConfig: mcpConfig || undefined },
+          hooks: {
+            text: chunk => { answer.text += chunk; },
+            tool: () => {}, cost: () => {},
+            session: id => { record.sessionId = id; saveMaster(record); },
+            error: error => { answer.error = error; },
+            denied: denials => { answer.error = `Provider refused tools: ${denials.map(denial => denial.tool_name).join(', ')}. Check workspace permissions.`; },
+          },
+        });
+        if (answer.error === 'Reply interrupted before completion.') delete answer.error;
+        if (abort.signal.aborted) answer.error = 'Stopped.';
+        if (!answer.text && !answer.error) answer.error = 'The provider returned no reply.';
+      } catch (error) {
+        answer.error = (error as Error).message;
+      } finally {
+        clearTimeout(timer);
+        record.promptPrefilled = true;
+        saveMaster(record);
+      }
+      return { messages: record.messages, conversation: publicConversation(record) };
+    });
+  } finally {
+    masterTurns.delete(ticketId);
+  }
 }

@@ -144,6 +144,7 @@ export async function buildStatus(app: GantryApp): Promise<Record<string, unknow
         id: ticket.id,
         projectId,
         title: ticket.title,
+        assistantName: ticket.assistant_name,
         description: ticket.description,
         status: ticket.status,
         scope: ticket.scope,

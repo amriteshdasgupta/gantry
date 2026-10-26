@@ -72,6 +72,9 @@
       "category": "public.app-category.developer-tools",
       "icon": "electron/icon.icns",
       "identity": null,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Gantry uses your microphone to transcribe requests for your ticket assistants with your configured local speech service."
+      },
       "darkModeSupport": true
     },
     "asar": true,

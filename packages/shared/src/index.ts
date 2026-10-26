@@ -1,4 +1,5 @@
 export * from './ids.js';
+export * from './assistant-name.js';
 export * from './paths.js';
 export * from './branch.js';
 export * from './redact.js';

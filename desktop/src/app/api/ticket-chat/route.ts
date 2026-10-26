@@ -1,6 +1,6 @@
 import { handle, httpError } from "@/lib/server/http";
 import { ticketContext } from "@/lib/server/ticket-chat";
-import { conversationFor, publicConversation, openTicketConversation } from "@/lib/server/ticket-conversations";
+import { conversationFor, publicConversation, openTicketConversation, masterConversationFor, masterBusy, sendMasterMessage, stopMaster } from "@/lib/server/ticket-conversations";
 
 export async function POST(req: Request) {
   return handle(async () => {
@@ -12,6 +12,13 @@ export async function POST(req: Request) {
     const body = await req.json() as { ticketId: string; action: string; text?: string; messageId?: string };
     if (!/^[\w-]+$/.test(body.ticketId)) throw httpError(400, 'Invalid ticket.');
     if (body.action === 'open') return Response.json(await openTicketConversation(body.ticketId, caller.origin));
+    if (body.action === 'send-master') return Response.json(await sendMasterMessage(body.ticketId, body.text, caller.origin));
+    if (body.action === 'stop-master') { stopMaster(body.ticketId); return Response.json({ ok: true }); }
+    if (body.action === 'load-master') {
+      await ticketContext(body.ticketId);
+      const record = masterConversationFor(body.ticketId);
+      return Response.json({ messages: record?.messages ?? [], busy: masterBusy(body.ticketId), conversation: publicConversation(record) });
+    }
     if (!['load', 'prepare'].includes(body.action)) throw httpError(400, 'Ticket chat now opens in the provider app. Use Open chat.');
     const context = await ticketContext(body.ticketId, body.action === 'prepare');
     return Response.json({ ...context, conversation: publicConversation(conversationFor(body.ticketId)) });

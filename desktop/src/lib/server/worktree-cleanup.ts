@@ -3,9 +3,13 @@ import type { CleanupAssessment } from '../client/gantry';
 import { executionHasWork } from './workflow-executor';
 import { pendingFor, queuedFor, checkoutsHaveAgents, withIdleCheckouts } from './chats';
 import { withLock } from './exec';
+import { masterBusy } from './ticket-conversations';
 
 function blockersFor(assessment: CleanupAssessment): string[] {
   const blockers = [...assessment.blockers];
+  if (assessment.ticketIds.some(masterBusy)) {
+    blockers.push('Wait for master chat replies to finish before cleanup.');
+  }
   if (assessment.ticketIds.some(id => executionHasWork(id))) {
     blockers.push('Pause workflow work on every ticket sharing this branch and wait for its agents to stop before cleanup.');
   }
