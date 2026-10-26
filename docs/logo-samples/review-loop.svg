@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="currentColor" role="img" aria-labelledby="title description">
+  <title id="title">Gantry — Review Loop concept</title>
+  <desc id="description">A squared return route ends in one left-facing wedge, bringing work back for another pass.</desc>
+  <path d="M 5 5 H 21 Q 28 5 28 12 V 18 Q 28 25 21 25 H 12 V 29 L 4 23 L 12 17 V 21 H 21 Q 24 21 24 18 V 12 Q 24 9 21 9 H 5 Z" />
+</svg>

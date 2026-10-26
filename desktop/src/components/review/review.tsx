@@ -137,17 +137,20 @@ export function Review({ id, initialFile, embedded = false, spaceId, onFileChang
         setLocalError(null); setLocal(next);
         if (localRevision.current !== next.revision) {
           const first = localRevision.current === null;
+          const openLocal = first && (next.files.length || next.commits) && !id.startsWith("~");
           localRevision.current = next.revision;
-          setFiles({}); setFileError({}); setAllFiles(null);
+          // PR files do not change with the local worktree. Keep their editors mounted
+          // so a late local-status response cannot discard an in-progress question.
+          if (source === "local" || openLocal) { setFiles({}); setFileError({}); setAllFiles(null); }
           // A ticket's local output opens on what it committed; its worktree's stray files can wait.
-          if (first && (next.files.length || next.commits) && !id.startsWith("~")) { setSource("local"); setCurrent(next.files[0]?.path ?? null); }
+          if (openLocal) { setSource("local"); setCurrent(next.files[0]?.path ?? null); }
         }
       } catch (e) { if (live) setLocalError((e as Error).message); }
     };
     void update();
     const timer = setInterval(() => { if (!document.hidden) void update(); }, 3000);
     return () => { live = false; clearInterval(timer); };
-  }, [id, loaded, answers]);
+  }, [id, loaded, answers, source]);
 
   // Reviewers' comments from GitHub, for pull requests.
   const isPull = data?.target.kind === "pull";

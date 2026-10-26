@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('merge completion moves the linked ticket without reload or waiting for polling', async ({ page }) => {
+test('merge completion moves the linked ticket without reload or waiting for polling', async ({ page }, testInfo) => {
   const label = 'TEST_d193df13';
   const id = `${label}/repo/pull/1`;
   const ticket = { id: 'merge', title: `${label}_ticket`, projectId: 'test', status: 'in_progress', description: '', scope: 'both', branch: 'test/merge', run: null, pullRequests: [], artifacts: [], reviewSpaceId: 'space-merge' };
@@ -43,5 +43,7 @@ test('merge completion moves the linked ticket without reload or waiting for pol
   await page.getByRole('navigation', { name: 'Gantry workspace' }).getByRole('button', { name: /Tickets/ }).click();
   await expect(page.getByRole('region', { name: 'Done', exact: true }).locator('[data-ticket-id="merge"]')).toBeVisible();
   expect(unexpected).toEqual([]);
-  await page.screenshot({ path: `${process.env.GANTRY_EVIDENCE_DIR}/final.png`, fullPage: true });
+  const evidenceDir = process.env.GANTRY_EVIDENCE_DIR;
+  const screenshot = evidenceDir && evidenceDir !== 'undefined' ? `${evidenceDir}/final.png` : testInfo.outputPath('final.png');
+  await page.screenshot({ path: screenshot, fullPage: true });
 });

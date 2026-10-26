@@ -10,9 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Create and edit workspace and ticket graph drafts with an inline AI assistant, using configured providers to propose nodes, stage prompts, and routing conditions. Keep the canvas editable, reject stale proposals, and undo assistant changes before saving.
 
+### Changed
+
+- Adopt the original Routed G logo: white on violet across the README, desktop header, browser favicon, and macOS, Windows, and Linux app icons, including the development Dock icon.
+
 ### Fixed
 
 - Let the graph assistant repair incomplete automatic graph drafts, including disconnected nodes and missing start nodes, while requiring fully valid replacement graphs.
+- Preserve in-progress PR review replies when a delayed local-worktree refresh arrives.
 
 ## [0.1.1] - 2026-10-26
 

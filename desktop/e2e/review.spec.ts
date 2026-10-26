@@ -216,10 +216,22 @@ test("one file holds several threads, started from +, a drag, or selected code",
 
 test("a question asked while another is answering waits its turn", async ({ page }) => {
   const errors = watchConsole(page);
+  let localRequested = false;
+  let releaseLocal!: () => void;
+  const localReady = new Promise<void>((resolve) => { releaseLocal = resolve; });
+  await page.route("**/api/local-changes?*", async (route) => {
+    const response = await route.fetch();
+    localRequested = true;
+    await localReady;
+    await route.fulfill({ response });
+  }, { times: 1 });
   await page.goto(`${PR}?file=src/math.ts`);
   const first = page.locator("[data-thread]").filter({ hasText: "Why throw instead" });
   const second = page.locator("[data-thread]").filter({ hasText: "closing brace" });
   await first.getByPlaceholder("Reply…").fill("SLOW one");
+  await expect.poll(() => localRequested).toBe(true);
+  releaseLocal();
+  await expect(first.getByPlaceholder("Reply…")).toHaveValue("SLOW one");
   await first.getByPlaceholder("Reply…").press("Enter");
   await expect(first.getByText("Answering")).toBeVisible();
   await second.getByPlaceholder("Reply…").fill("Queued one");

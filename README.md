@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/images/gantry-icon.svg" alt="Gantry's Routed G app icon" width="112" height="112">
+
 # Gantry
 
 ### A Graph for your agents to follow
