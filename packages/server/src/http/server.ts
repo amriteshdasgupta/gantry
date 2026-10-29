@@ -19,6 +19,8 @@ import { initializeWorkspace } from '../projects/initialize.js';
 import { ticketWorkspace } from '../tickets/workspace.js';
 import { TicketError, validateTicketInput, type TicketInput } from '../tickets/store.js';
 import { assessTicketCleanup, cleanupTicketWorktrees } from '../tickets/cleanup.js';
+import { PROVIDERS, detectProvider, testCredentials, type Provider } from '../discover/vcs.js';
+import { git } from '../git/git.js';
 
 /**
  * HTTP API + dashboard host. Routes are grouped by concern in ./routes/*;
@@ -90,6 +92,61 @@ export async function createHttpServer(app: GantryApp) {
     await app.remote.sync(true);
     if (app.remote.lastError) throw new Error(app.remote.lastError);
     return { ok: true, checkedAt: app.remote.lastSyncAt };
+  });
+
+
+  // ---- version control provider (Reviews) ----------------------------------
+  // Tokens are write-only: the API reports whether one is saved, never its value.
+  fastify.get('/api/vcs', async () => {
+    const vcs = app.remote.vcs;
+    const repositories = [];
+    for (const project of await app.projects()) {
+      for (const repo of project.config.repositories) {
+        const remoteUrl = await git(path.resolve(project.workspace, repo.path), 'remote', 'get-url', repo.remote).catch(() => '');
+        repositories.push({
+          projectId: project.config.project.id,
+          projectName: project.config.project.name,
+          repositoryId: repo.id,
+          remoteUrl: remoteUrl.replace(/\/\/[^@/]+@/, '//'),
+          detected: detectProvider(remoteUrl),
+          provider: vcs.providerFor(project.config.project.id, repo.id, remoteUrl),
+          chosen: vcs.isChosen(project.config.project.id, repo.id),
+          error: app.remote.pullErrors.get(`${project.config.project.id}:${repo.id}`) ?? null,
+        });
+      }
+    }
+    return {
+      providers: Object.fromEntries(PROVIDERS.map((provider) => [provider, { hasToken: vcs.hasToken(provider) }])),
+      gitlabUrl: vcs.gitlabUrl ?? '',
+      repositories,
+    };
+  });
+
+  fastify.post('/api/vcs', async (request) => {
+    const body = (request.body ?? {}) as {
+      repository?: { projectId: string; repositoryId: string; provider: string | null };
+      credentials?: { provider: string; token?: string | null; gitlabUrl?: string | null };
+    };
+    const isProvider = (value: unknown): value is Provider => PROVIDERS.includes(value as Provider);
+    if (body.repository) {
+      const { projectId, repositoryId, provider } = body.repository;
+      const project = (await app.projects()).find((candidate) => candidate.config.project.id === projectId);
+      if (!project?.config.repositories.some((repo) => repo.id === repositoryId)) throw Object.assign(new Error('Unknown repository'), { statusCode: 404 });
+      if (provider !== null && !isProvider(provider)) throw new Error('Unknown provider');
+      app.remote.vcs.setProvider(projectId, repositoryId, provider);
+    }
+    if (body.credentials) {
+      if (!isProvider(body.credentials.provider)) throw new Error('Unknown provider');
+      app.remote.vcs.setCredentials(body.credentials.provider, body.credentials.token, body.credentials.gitlabUrl);
+    }
+    void app.remote.sync(true);
+    return { ok: true };
+  });
+
+  fastify.post('/api/vcs/test', async (request) => {
+    const { provider } = (request.body ?? {}) as { provider?: string };
+    if (!PROVIDERS.includes(provider as Provider)) throw new Error('Unknown provider');
+    return { ok: true, user: await testCredentials(app.remote.vcs, provider as Provider) };
   });
 
   // ---- projects ------------------------------------------------------------

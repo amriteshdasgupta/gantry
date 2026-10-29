@@ -8,9 +8,12 @@ let workspaceTemplates = [];
 let workspacePrompt = 'Implement ${ticket.title} in the prepared worktrees.';
 const project = { id: 'fixture', name: 'Fixture workspace', workspace: '/fixture/workspace', defaultAgent: 'generic', scopes: [], services: [{ id: 'frontend', repository: 'frontend' }], environments: [], agents: [{ id:'generic', capabilities:{ available:true,label:'Test agent' } }] };
 let overrides = null;
+const vcs = { providers: { github: { hasToken: false }, gitlab: { hasToken: false }, bitbucket: { hasToken: false } }, gitlabUrl: '', repo: { projectId: 'fixture', projectName: 'Fixture workspace', repositoryId: 'frontend', remoteUrl: 'git@gitlab.com:grp/frontend.git', detected: 'gitlab', provider: 'gitlab', chosen: false, error: null } };
 const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   const send = (value, status = 200) => { res.statusCode = status; res.end(JSON.stringify(value)); };
+  if (req.url === '/api/vcs' && req.method === 'GET') return send({ providers: vcs.providers, gitlabUrl: vcs.gitlabUrl, repositories: [vcs.repo] });
+  if (req.url === '/api/vcs/test') return send({ ok: true, user: 'fixture-user' });
   if (req.url === '/api/version') return send({ version:'0.1.0' });
   if (req.url === '/api/status' && overrides) return send(overrides);
   if (req.url === '/api/status') return send({ version:'0.1.0', projects:[project], tickets, jobs:[], previews:[{ id:'preview-1', projectId:'fixture', branch:'ticket/review', status:'ready', paused:false, checkouts:[], services:[{id:'frontend',state:'ready',port:6500,openLink:'http://127.0.0.1:6500',logUrl:'/logs/preview/preview-1/frontend'}] }], pulls:[{id:'pull-1',projectId:'fixture',branch:'ticket/review',ready:true,blockers:[],pulls:{frontend:{number:1,title:'Guard add against NaN',url:'https://github.com/local/fixture/pull/1'}}}] });
@@ -34,6 +37,11 @@ const server = http.createServer(async (req, res) => {
     return send(template, id ? 200 : 201);
   }
   if (req.url === '/api/projects/fixture/chat-prompt') { if (req.method === 'POST') workspacePrompt=body.prompt; return send({prompt:workspacePrompt}); }
+  if (req.url === '/api/vcs' && req.method === 'POST') {
+    if (body.repository) Object.assign(vcs.repo, { provider: body.repository.provider ?? vcs.repo.detected, chosen: Boolean(body.repository.provider) });
+    if (body.credentials) { vcs.providers[body.credentials.provider].hasToken = body.credentials.token !== null; if (body.credentials.gitlabUrl !== undefined) vcs.gitlabUrl = body.credentials.gitlabUrl; }
+    return send({ ok: true });
+  }
   if (req.url === "/__fixture") { overrides = body.status ?? null; return send({ok:true}); }
   if (req.url === '/api/projects/fixture/tickets') {
     const template = body.workflowTemplateId && body.workflowTemplateId !== 'default' ? workspaceTemplates.find(template => template.id === body.workflowTemplateId)?.graph : workspaceGraph;
