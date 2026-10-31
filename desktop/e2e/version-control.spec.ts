@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
 
 test('a workspace chooses its version control provider from its settings modal', async ({ page }) => {
+  const actions = page.getByRole('button', { name: 'Actions for Fixture workspace' });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Settings for Fixture workspace' }).click();
+  await actions.click();
+  await page.getByRole('menuitem', { name: 'Settings' }).click();
   const dialog = page.getByRole('dialog', { name: 'Fixture workspace settings' });
   await expect(dialog.getByText('git@gitlab.com:grp/frontend.git')).toBeVisible();
 
@@ -11,9 +13,11 @@ test('a workspace chooses its version control provider from its settings modal',
   await expect(dialog.getByText('detected gitlab')).toBeHidden();
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
+  await expect(actions).toBeFocused();
 
   await page.reload();
-  await page.getByRole('button', { name: 'Settings for Fixture workspace' }).click();
+  await actions.click();
+  await page.getByRole('menuitem', { name: 'Settings' }).click();
   await expect(dialog.getByLabel('Provider for frontend')).toHaveValue('bitbucket');
 
   await dialog.getByRole('link', { name: 'Manage access tokens' }).click();

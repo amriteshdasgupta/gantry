@@ -2,7 +2,7 @@
 
 import { ticketServiceScopes } from "@/lib/client/gantry";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
-import { ArrowUpRightIcon, CheckIcon, FolderIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, SettingsIcon, Trash2Icon } from "lucide-react";
+import { ArrowUpRightIcon, CheckIcon, FolderIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import { PreviewPane } from "./preview-pane";
 import { GraphStatus, TicketWorkflow, graphSummary } from "./workflow";
 import { SetupCheck } from "./setup-check";
 import { AddWorkspaceDialog } from "./add-workspace-dialog";
+import { WorkspaceActionsMenu } from "./workspace-actions-menu";
 import { WorkspaceSettingsDialog } from "./workspace-settings-dialog";
 import { DeleteTicketDialog } from "./delete-ticket-dialog";
 import { CleanupWorktreesDialog } from "./cleanup-worktrees-dialog";
@@ -317,7 +318,7 @@ export function GantryWorkspace() {
               <span className="min-w-0 flex-1 whitespace-normal break-words font-semibold">{p.name}</span>
               {active > 0 && <span className="text-xs tabular-nums" aria-label={`${active} in progress`}>{active}</span>}
               {current && <CheckIcon aria-hidden="true" className="size-4 shrink-0" />}
-            </Button><Button variant="ghost" size="icon-sm" aria-label={`Settings for ${p.name}`} onClick={() => setSettingsFor(p)}><SettingsIcon /></Button></div>;
+            </Button><WorkspaceActionsMenu name={p.name} onSettings={() => setSettingsFor(p)} /></div>;
           })}
         </nav>
         {project && <section aria-label={`${project.name} navigation`} className="flex flex-1 flex-col gap-4 p-3">
