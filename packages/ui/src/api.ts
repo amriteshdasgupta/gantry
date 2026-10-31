@@ -155,7 +155,7 @@ async function request<T>(route: string, method: string, body?: unknown): Promis
 export const api = {
   status: (): Promise<StatusView> => request('/api/status', 'GET'),
   addProject: (workspace: string): Promise<{ ok: boolean; projectId: string }> => request('/api/projects', 'POST', { workspace }),
-  removeProject: (projectId: string): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}`, 'DELETE'),
+  removeProject: (projectId: string, deleteData: boolean): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}`, 'DELETE', { confirm: true, deleteData }),
   refreshProject: (projectId: string): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}/refresh`, 'POST', {}),
   createTicket: (projectId: string, input: { title: string; description?: string; scope?: string; scopes?: string[]; branch?: string; additions?: string | null }): Promise<TicketView> =>
     request(`/api/projects/${projectId}/tickets`, 'POST', input),

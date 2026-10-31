@@ -30,7 +30,7 @@ function scopeFor(assessment: CleanupAssessment): string[] {
   return [...new Set(assessment.ticketIds)].sort();
 }
 
-function withTicketLocks<T>(ids: string[], action: () => Promise<T>): Promise<T> {
+export function withTicketLocks<T>(ids: string[], action: () => Promise<T>): Promise<T> {
   const keys = ids.flatMap(id => [`workflow:${id}`, `ticket-conversation:${id}`]);
   const acquire = (index: number): Promise<T> => index === keys.length
     ? action()

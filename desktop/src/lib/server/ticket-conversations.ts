@@ -332,6 +332,10 @@ export function masterConversationFor(id: string): TicketConversation | null {
   try { return JSON.parse(fs.readFileSync(masterFileFor(id), "utf8")); }
   catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return null; throw e; }
 }
+export function forgetConversations(id: string) {
+  fs.rmSync(fileFor(id), { force: true });
+  fs.rmSync(masterFileFor(id), { force: true });
+}
 function saveMaster(record: TicketConversation) {
   fs.mkdirSync(path.dirname(masterFileFor(record.ticketId)), { recursive: true, mode: 0o700 });
   const file = masterFileFor(record.ticketId);

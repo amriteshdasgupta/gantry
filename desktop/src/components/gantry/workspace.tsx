@@ -27,6 +27,7 @@ import { GraphStatus, TicketWorkflow, graphSummary } from "./workflow";
 import { SetupCheck } from "./setup-check";
 import { AddWorkspaceDialog } from "./add-workspace-dialog";
 import { WorkspaceActionsMenu } from "./workspace-actions-menu";
+import { RemoveWorkspaceDialog } from "./remove-workspace-dialog";
 import { WorkspaceSettingsDialog } from "./workspace-settings-dialog";
 import { DeleteTicketDialog } from "./delete-ticket-dialog";
 import { CleanupWorktreesDialog } from "./cleanup-worktrees-dialog";
@@ -69,6 +70,7 @@ export function GantryWorkspace() {
   const [editingTicket, setEditingTicket] = useState(false);
   const [adding, setAdding] = useState(false);
   const [settingsFor, setSettingsFor] = useState<ProjectView | null>(null);
+  const [removing, setRemoving] = useState<ProjectView | null>(null);
   const [busy, setBusy] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const pendingMoves = useRef(new Set<string>());
@@ -161,6 +163,18 @@ export function GantryWorkspace() {
   const ticketPreviews = previews.filter(p => p.branch === ticket?.branch && !p.isPrimary);
   const jobs = data?.jobs.filter((j) => j.projectId === project?.id && ["queued", "running", "failed"].includes(j.state)).slice(0, 5) ?? [];
 
+  function enterWorkspace(id: string) {
+    reviewNavigation.invalidate();
+    setReviewSpace(null);
+    setArea("tickets");
+    setProjectId(id);
+    setSelected(null);
+    setPreviewTicket("main");
+    setTicketTab("details");
+    setEditingTicket(false);
+    setCreating(false);
+    setLog(null);
+  }
   async function act(action: () => Promise<unknown>, message?: string) {
     if (busy) return false;
     setBusy(true);
@@ -270,6 +284,13 @@ export function GantryWorkspace() {
     {cleaning && <CleanupWorktreesDialog ticketId={cleaning.id} title={cleaning.title} onClose={() => setCleaning(null)} onCleaned={refresh} />}
     {adding && <AddWorkspaceDialog busy={busy} onCancel={() => setAdding(false)} onConnect={dir => void act(() => gantry.addProject(dir), "Workspace connected").then(ok => { if (ok) setAdding(false); })} />}
     {settingsFor && <WorkspaceSettingsDialog project={settingsFor} onClose={() => setSettingsFor(null)} />}
+    {removing && <RemoveWorkspaceDialog project={removing} onClose={() => setRemoving(null)} onRemoved={() => {
+      const wasCurrent = removing.id === project?.id;
+      setRemoving(null);
+      toast.success(`Removed ${removing.name}`);
+      if (wasCurrent) enterWorkspace("");
+      void refresh();
+    }} />}
     {deleting && <DeleteTicketDialog title={deleting.title} busy={busy} onCancel={() => setDeleting(null)} onDelete={() => void act(() => gantry.deleteTicket(deleting.id), "Ticket deleted").then(ok => { if (ok) { if (selected === deleting.id) closeTicket(); setDeleting(null); } })} />}
     <header className="app-bar flex h-12 shrink-0 items-center gap-3 border-b px-4">
       <span className="flex items-center gap-2 text-sm font-semibold">
@@ -302,23 +323,14 @@ export function GantryWorkspace() {
               title={p.workspace}
               onClick={() => {
                 if (current || !confirmGraphNavigation()) return;
-                reviewNavigation.invalidate();
-                setReviewSpace(null);
-                setArea("tickets");
-                setProjectId(p.id);
-                setSelected(null);
-                setPreviewTicket("main");
-                setTicketTab("details");
-                setEditingTicket(false);
-                setCreating(false);
-                setLog(null);
+                enterWorkspace(p.id);
               }}
             >
               <FolderIcon className="size-4 shrink-0" />
               <span className="min-w-0 flex-1 whitespace-normal break-words font-semibold">{p.name}</span>
               {active > 0 && <span className="text-xs tabular-nums" aria-label={`${active} in progress`}>{active}</span>}
               {current && <CheckIcon aria-hidden="true" className="size-4 shrink-0" />}
-            </Button><WorkspaceActionsMenu name={p.name} onSettings={() => setSettingsFor(p)} /></div>;
+            </Button><WorkspaceActionsMenu name={p.name} onSettings={() => setSettingsFor(p)} onRemove={() => { if (!current || confirmGraphNavigation()) setRemoving(p); }} /></div>;
           })}
         </nav>
         {project && <section aria-label={`${project.name} navigation`} className="flex flex-1 flex-col gap-4 p-3">

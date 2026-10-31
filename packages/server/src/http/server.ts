@@ -16,6 +16,7 @@ import { templateBody, buildPromptVars, renderPrompt, repositoryPath } from '../
 import { findInstructionFiles } from '../prompts/instructions.js';
 import { readPreviewLoginEmail } from '../supervisor/preview-login.js';
 import { initializeWorkspace } from '../projects/initialize.js';
+import { removeWorkspace } from '../projects/remove.js';
 import { ticketWorkspace } from '../tickets/workspace.js';
 import { TicketError, validateTicketInput, type TicketInput } from '../tickets/store.js';
 import { assessTicketCleanup, cleanupTicketWorktrees } from '../tickets/cleanup.js';
@@ -160,7 +161,10 @@ export async function createHttpServer(app: GantryApp) {
 
   fastify.delete('/api/projects/:projectId', async (request) => {
     const { projectId } = request.params as { projectId: string };
-    const removed = await app.removeWorkspace(projectId);
+    const body = (request.body ?? {}) as { confirm?: unknown; deleteData?: unknown };
+    if (body.confirm !== true) throw new Error('Removing a workspace requires confirm: true.');
+    if (typeof body.deleteData !== 'boolean') throw new Error('Choose whether to delete the workspace data (deleteData).');
+    const removed = await removeWorkspace(app, projectId, body.deleteData);
     if (!removed) throw Object.assign(new Error('Unknown project'), { statusCode: 404 });
     return { ok: true };
   });
