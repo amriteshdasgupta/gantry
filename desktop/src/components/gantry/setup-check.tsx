@@ -24,6 +24,6 @@ export function SetupCheck() {
       <p className="font-medium">Gantry needs herdr and a coding CLI (Claude Code or OpenCode) to open chats.</p>
       {missing.map((m) => <p key={m}>{m}</p>)}
     </div>
-    <Link href="/settings" className="shrink-0 underline underline-offset-4">Settings</Link>
+    <Link href={status.herdr.ok ? "/settings" : "/settings?tab=chats"} className="shrink-0 underline underline-offset-4">Settings</Link>
   </div>;
 }
