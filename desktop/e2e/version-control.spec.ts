@@ -72,10 +72,21 @@ test('Settings tabs separate agents, global version control tokens and chats', a
   await gitlab.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('GitLab saved')).toBeVisible();
   await expect(gitlab.getByText('Token saved')).toBeVisible();
-  await expect(page.getByLabel('GitLab token')).toHaveValue('');
+  await expect(page.getByLabel('GitLab token')).toHaveValue('glpat-test');
+  await expect(gitlab.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 
   await page.reload();
   await expect(gitlab.getByText('Token saved')).toBeVisible();
+  await expect(page.getByLabel('GitLab token')).toHaveValue('');
+  await expect(page.getByLabel('GitLab token')).toHaveAttribute('placeholder', '••••••••••••••••');
   await gitlab.getByRole('button', { name: 'Test' }).click();
   await expect(page.getByText('Signed in as fixture-user')).toBeVisible();
+
+  await page.getByLabel('GitLab token').fill('glpat-test');
+  await gitlab.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByLabel('GitLab token')).toHaveValue('glpat-test');
+  await gitlab.getByRole('button', { name: 'Remove' }).click();
+  await expect(gitlab.getByText('No token saved')).toBeVisible();
+  await expect(page.getByLabel('GitLab token')).toHaveValue('');
+  await expect(page.getByLabel('GitLab token')).toHaveAttribute('placeholder', 'Paste token');
 });

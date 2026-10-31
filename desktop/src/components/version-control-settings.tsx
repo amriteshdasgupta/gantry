@@ -17,6 +17,8 @@ export const PROVIDERS: { id: VcsProvider; label: string; hint: string }[] = [
 export function VersionControlSettings() {
   const [view, setView] = useState<VcsView | null>(null);
   const [tokens, setTokens] = useState<Partial<Record<VcsProvider, string>>>({});
+  /** What each field last saved, so a saved token stays visible as dots without being sent again. */
+  const [savedTokens, setSavedTokens] = useState<Partial<Record<VcsProvider, string>>>({});
   const [gitlabUrl, setGitlabUrl] = useState("");
 
   const show = useCallback((next: VcsView) => { setView(next); setGitlabUrl(next.gitlabUrl); }, []);
@@ -24,8 +26,19 @@ export function VersionControlSettings() {
   useEffect(() => { gantry.vcs().then(show, (e: Error) => toast.error(e.message)); }, [show]);
 
   async function save(input: Parameters<typeof gantry.saveVcs>[0], message: string) {
-    try { await gantry.saveVcs(input); await load(); toast.success(message); }
-    catch (e) { toast.error((e as Error).message); }
+    try { await gantry.saveVcs(input); await load(); toast.success(message); return true; }
+    catch (e) { toast.error((e as Error).message); return false; }
+  }
+  async function saveToken(provider: VcsProvider, label: string) {
+    const token = tokens[provider];
+    const changed = token && token !== savedTokens[provider] ? token : undefined;
+    const saved = await save({ credentials: { provider, token: changed, ...(provider === "gitlab" ? { gitlabUrl } : {}) } }, `${label} saved`);
+    if (saved && changed) setSavedTokens((s) => ({ ...s, [provider]: changed }));
+  }
+  async function removeToken(provider: VcsProvider, label: string) {
+    if (!await save({ credentials: { provider, token: null } }, `${label} token removed`)) return;
+    setTokens((t) => ({ ...t, [provider]: "" }));
+    setSavedTokens((s) => ({ ...s, [provider]: undefined }));
   }
   async function test(provider: VcsProvider) {
     try { toast.success(`Signed in as ${(await gantry.testVcs(provider)).user}`); }
@@ -53,16 +66,18 @@ export function VersionControlSettings() {
           )}
           <div className="flex gap-2">
             <Input
-              type="password" autoComplete="off" aria-label={`${p.label} token`} placeholder={view?.providers[p.id].hasToken ? "Replace token" : "Paste token"}
+              // The server never returns a saved token or its length, so a saved token shows as a fixed run of dots.
+              type="password" autoComplete="off" aria-label={`${p.label} token`} placeholder={view?.providers[p.id].hasToken ? "••••••••••••••••" : "Paste token"}
+              className={view?.providers[p.id].hasToken ? "placeholder:text-foreground!" : undefined}
               value={tokens[p.id] ?? ""} onChange={(e) => setTokens((t) => ({ ...t, [p.id]: e.target.value }))}
             />
             <Button
               variant="outline"
-              disabled={!tokens[p.id] && (p.id !== "gitlab" || gitlabUrl === (view?.gitlabUrl ?? ""))}
-              onClick={() => void save({ credentials: { provider: p.id, token: tokens[p.id] || undefined, ...(p.id === "gitlab" ? { gitlabUrl } : {}) } }, `${p.label} saved`).then(() => setTokens((t) => ({ ...t, [p.id]: "" })))}
+              disabled={(!tokens[p.id] || tokens[p.id] === savedTokens[p.id]) && (p.id !== "gitlab" || gitlabUrl === (view?.gitlabUrl ?? ""))}
+              onClick={() => void saveToken(p.id, p.label)}
             >Save</Button>
             <Button variant="outline" disabled={!view?.providers[p.id].hasToken} onClick={() => void test(p.id)}>Test</Button>
-            <Button variant="ghost" disabled={!view?.providers[p.id].hasToken} onClick={() => void save({ credentials: { provider: p.id, token: null } }, `${p.label} token removed`)}>Remove</Button>
+            <Button variant="ghost" disabled={!view?.providers[p.id].hasToken} onClick={() => void removeToken(p.id, p.label)}>Remove</Button>
           </div>
         </div>
       ))}
