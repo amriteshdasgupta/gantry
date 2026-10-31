@@ -6,6 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PROVIDERS } from "@/components/version-control-settings";
 import { gantry, type ProjectView, type VcsProvider, type VcsView } from "@/lib/client/gantry";
 
+const providerLabel = (id: VcsProvider) => PROVIDERS.find(p => p.id === id)?.label ?? id;
+
 /** Choose where each of this workspace's repositories is hosted, so Reviews lists its pull requests from the right API. */
 export function WorkspaceSettingsDialog({ project, onClose }: { project: ProjectView; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -36,10 +38,10 @@ export function WorkspaceSettingsDialog({ project, onClose }: { project: Project
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">{repo.repositoryId}</div>
-            <div className="truncate text-xs text-muted-foreground">{repo.remoteUrl || "No remote"}{!repo.chosen && ` · detected ${repo.detected}`}</div>
+            <div className="truncate text-xs text-muted-foreground">{repo.remoteUrl || "No remote"}{!repo.chosen && ` · detected ${providerLabel(repo.detected)}`}</div>
           </div>
           <select aria-label={`Provider for ${repo.repositoryId}`} className="h-9 rounded-md border bg-background px-2 text-sm" value={repo.chosen ? repo.provider : ""} onChange={e => void choose(repo.repositoryId, (e.target.value || null) as VcsProvider | null)}>
-            <option value="">Auto-detect ({repo.detected})</option>
+            <option value="">Auto-detect ({providerLabel(repo.detected)})</option>
             {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </div>

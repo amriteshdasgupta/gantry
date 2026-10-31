@@ -7,10 +7,12 @@ test('a workspace chooses its version control provider from its settings modal',
   await page.getByRole('menuitem', { name: 'Settings' }).click();
   const dialog = page.getByRole('dialog', { name: 'Fixture workspace settings' });
   await expect(dialog.getByText('git@gitlab.com:grp/frontend.git')).toBeVisible();
+  await expect(dialog.getByText('detected GitLab')).toBeVisible();
+  await expect(dialog.getByRole('option', { name: 'Auto-detect (GitLab)' })).toBeAttached();
 
   await dialog.getByLabel('Provider for frontend').selectOption('bitbucket');
   await expect(dialog.getByLabel('Provider for frontend')).toHaveValue('bitbucket');
-  await expect(dialog.getByText('detected gitlab')).toBeHidden();
+  await expect(dialog.getByText('detected GitLab')).toBeHidden();
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
   await expect(actions).toBeFocused();
