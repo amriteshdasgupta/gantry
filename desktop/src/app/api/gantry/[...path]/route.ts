@@ -4,6 +4,7 @@ import { syncGantrySpaces } from "@/lib/server/spaces";
 import { ticketOutputs } from "@/lib/server/ticket-outputs";
 import type { StatusView } from "@/lib/client/gantry";
 import { ticketWorktreeCleanup } from "@/lib/server/worktree-cleanup";
+import { removeWorkspace } from "@/lib/server/workspace-removal";
 
 /** Same-origin bridge to the local Gantry service; never accepts an upstream URL. */
 
@@ -58,8 +59,11 @@ async function proxy(req: Request, context: Context) {
     const workflowMutation = /^api\/tickets\/([\w-]+)\/(workflow|workflow-progress|start|resume|handoff)$/.exec(route);
     if (req.method === 'POST' && workflowMutation && executionFor(workflowMutation[1])) return Response.json({error:'This ticket is managed by workflow automation. Use its execution controls.'},{status:409});
     const cleanup = /^api\/tickets\/([\w-]+)\/worktree-cleanup$/.exec(route);
+    const removal = req.method === "DELETE" ? /^api\/projects\/([\w-]+)$/.exec(route) : null;
     const response = cleanup
       ? await ticketWorktreeCleanup(upstream, cleanup[1], req.method, body)
+      : removal
+      ? await removeWorkspace(upstream, removal[1], body ?? "")
       : await fetch(new URL(`/${route}`, upstream), {
         method: req.method,
         headers: { "Content-Type": "application/json", Origin: upstream.origin },

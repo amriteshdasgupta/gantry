@@ -209,7 +209,7 @@ export const gantry = {
   saveWorkspacePrompt: (id: string, prompt: string): Promise<{ prompt: string }> => request(`/api/projects/${id}/chat-prompt`, 'POST', { prompt }),
   status: (): Promise<StatusView> => request('/api/status', 'GET'),
   addProject: (workspace: string): Promise<{ ok: boolean; projectId: string }> => request('/api/projects', 'POST', { workspace, initialize: true }),
-  removeProject: (projectId: string): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}`, 'DELETE'),
+  removeProject: (projectId: string, deleteData: boolean): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}`, 'DELETE', { confirm: true, deleteData }),
   refreshProject: (projectId: string): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}/refresh`, 'POST', {}),
   createTicket: (projectId: string, input: { title: string; description?: string; scope?: string; scopes?: string[]; branch?: string; additions?: string | null; workflowTemplateId?: string; graph?: Workflow }): Promise<TicketView> =>
     request(`/api/projects/${projectId}/tickets`, 'POST', input),

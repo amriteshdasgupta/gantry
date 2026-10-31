@@ -25,6 +25,13 @@ function write(store: Store) {
   fs.renameSync(`${FILE}.tmp`, FILE);
 }
 
+export function forgetAllowedTools(projectId: string) {
+  const store = read();
+  if (!(projectId in store)) return;
+  delete store[projectId];
+  write(store);
+}
+
 export function allowedTools(projectId: string, provider: 'claude' | 'opencode' = 'claude'): string[] {
   return (read()[projectId]?.allow ?? []).filter(r => isValidRule(r) && (!!parseOpenCodeRule(r) === (provider === 'opencode')));
 }

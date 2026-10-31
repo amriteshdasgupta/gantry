@@ -117,11 +117,25 @@ export function deleteSpace(id: string): SpacesResponse {
   return listSpaces();
 }
 
+/** Drop a removed workspace's ticket spaces, returning what they were reviewing. */
+export function forgetWorkspaceSpaces(projectId: string): string[] {
+  const data = read();
+  const gone = data.spaces.filter(s => s.gantry?.projectId === projectId);
+  if (!gone.length) return [];
+  data.spaces = data.spaces.filter(s => s.gantry?.projectId !== projectId);
+  write(data);
+  return gone.flatMap(s => s.targets);
+}
+
 /** Provision one stable space per workspace/ticket, keeping historical PRs and review state. */
 export function syncGantrySpaces(status: StatusView, outputs: Record<string, TicketOutputs> = {}): Record<string, string> {
   const data = read();
   let changed = false;
   const result: Record<string, string> = {};
+  // A removed workspace's spaces hide until it is added back and its tickets reopen them.
+  for (const space of data.spaces) {
+    if (space.gantry && !space.gantry.completed && !status.projects.some(p => p.id === space.gantry!.projectId)) { space.gantry.completed = true; changed = true; }
+  }
   for (const ticket of status.tickets) {
     const project = status.projects.find(p => p.id === ticket.projectId);
     if (!project) continue;
