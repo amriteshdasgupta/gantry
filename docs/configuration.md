@@ -77,7 +77,7 @@ Existing tickets retain their legacy `scope`; unrelated edits preserve it until 
 
 ### Version control provider (Reviews)
 
-The Reviews page lists open pull requests from GitHub (via `gh`), GitLab (merge requests) or Bitbucket Cloud. The provider is detected from each repository's remote and can be changed in **Settings → Version control**; the choice and any API tokens are saved in `vcs-credentials.json` (mode 0600) in the Gantry data directory, not in `gantry.yaml`, and the API never returns tokens. Self-hosted GitLab needs its URL set there too. GitLab and Bitbucket pull requests open on the provider's site; in-app review, comments and merge remain GitHub-only.
+The Reviews page lists open pull requests from GitHub (via `gh`), GitLab (merge requests) or Bitbucket Cloud. The provider is detected from each repository's remote and can be changed from the settings button on the workspace in the sidebar. API tokens apply to every workspace and are set in **Settings → Version control**; self-hosted GitLab needs its URL set there too. The choices and tokens are saved in `vcs-credentials.json` (mode 0600) in the Gantry data directory, not in `gantry.yaml`, and the API never returns tokens. GitLab and Bitbucket pull requests open on the provider's site; in-app review, comments and merge remain GitHub-only.
 
 ## `services[]`
 

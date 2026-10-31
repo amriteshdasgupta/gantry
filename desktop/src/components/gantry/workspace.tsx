@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ticketServiceScopes } from "@/lib/client/gantry";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 import { ArrowUpRightIcon, CheckIcon, FolderIcon, GitBranchIcon, GitPullRequestIcon, LayoutListIcon, NetworkIcon, Loader2Icon, MonitorIcon, PlusIcon, RefreshCwIcon, MessageSquareIcon, CircleDashedIcon, CircleDotIcon, CircleCheckIcon, Trash2Icon } from "lucide-react";
@@ -27,6 +26,8 @@ import { PreviewPane } from "./preview-pane";
 import { GraphStatus, TicketWorkflow, graphSummary } from "./workflow";
 import { SetupCheck } from "./setup-check";
 import { AddWorkspaceDialog } from "./add-workspace-dialog";
+import { WorkspaceActionsMenu } from "./workspace-actions-menu";
+import { WorkspaceSettingsDialog } from "./workspace-settings-dialog";
 import { DeleteTicketDialog } from "./delete-ticket-dialog";
 import { CleanupWorktreesDialog } from "./cleanup-worktrees-dialog";
 import { TicketDialog } from "./ticket-dialog";
@@ -67,6 +68,7 @@ export function GantryWorkspace() {
   const [creating, setCreating] = useState(false);
   const [editingTicket, setEditingTicket] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [settingsFor, setSettingsFor] = useState<ProjectView | null>(null);
   const [busy, setBusy] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const pendingMoves = useRef(new Set<string>());
@@ -267,6 +269,7 @@ export function GantryWorkspace() {
   return <div className="gantry-workspace flex h-full min-h-0 flex-col bg-background">
     {cleaning && <CleanupWorktreesDialog ticketId={cleaning.id} title={cleaning.title} onClose={() => setCleaning(null)} onCleaned={refresh} />}
     {adding && <AddWorkspaceDialog busy={busy} onCancel={() => setAdding(false)} onConnect={dir => void act(() => gantry.addProject(dir), "Workspace connected").then(ok => { if (ok) setAdding(false); })} />}
+    {settingsFor && <WorkspaceSettingsDialog project={settingsFor} onClose={() => setSettingsFor(null)} />}
     {deleting && <DeleteTicketDialog title={deleting.title} busy={busy} onCancel={() => setDeleting(null)} onDelete={() => void act(() => gantry.deleteTicket(deleting.id), "Ticket deleted").then(ok => { if (ok) { if (selected === deleting.id) closeTicket(); setDeleting(null); } })} />}
     <header className="app-bar flex h-12 shrink-0 items-center gap-3 border-b px-4">
       <span className="flex items-center gap-2 text-sm font-semibold">
@@ -292,10 +295,9 @@ export function GantryWorkspace() {
             const current = project?.id === p.id;
             const active = data.tickets.filter(t => t.projectId === p.id && t.status === "in_progress").length;
 
-            return <Button
-              key={p.id}
+            return <div key={p.id} className="flex items-center gap-1"><Button
               variant="ghost"
-              className={cn("h-auto min-h-12 w-full justify-start border border-transparent px-3 py-2 text-left", current && "border-violet-300 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-950")}
+              className={cn("h-auto min-h-12 min-w-0 flex-1 justify-start border border-transparent px-3 py-2 text-left", current && "border-violet-300 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-950")}
               aria-current={current ? "true" : undefined}
               title={p.workspace}
               onClick={() => {
@@ -316,7 +318,7 @@ export function GantryWorkspace() {
               <span className="min-w-0 flex-1 whitespace-normal break-words font-semibold">{p.name}</span>
               {active > 0 && <span className="text-xs tabular-nums" aria-label={`${active} in progress`}>{active}</span>}
               {current && <CheckIcon aria-hidden="true" className="size-4 shrink-0" />}
-            </Button>;
+            </Button><WorkspaceActionsMenu name={p.name} onSettings={() => setSettingsFor(p)} /></div>;
           })}
         </nav>
         {project && <section aria-label={`${project.name} navigation`} className="flex flex-1 flex-col gap-4 p-3">
@@ -454,7 +456,7 @@ export function GantryWorkspace() {
         {project && reviewSpace && <div className={area === "reviews" ? "flex min-h-0 flex-1 flex-col" : "hidden"}><ReviewWorkspace key={reviewSpace} projectId={project.id} spaceId={reviewSpace} initialTarget={null} initialFile={null} onNavigateSpace={navigateReview} /></div>}
         {project && area === "reviews" && !reviewSpace && <div className="divide-y">{pulls.map((g) => <section key={g.id} className="space-y-4 p-6"><div className="flex flex-wrap items-center gap-3"><GitBranchIcon className="size-4 text-muted-foreground" /><h2 className="min-w-0 flex-1 break-all font-medium">{g.branch}</h2><State value={g.ready ? "ready" : "blocked"} /><Button size="sm" disabled={busy} onClick={() => void review(Object.values(g.pulls).map((p) => p.url))}>Review {Object.keys(g.pulls).length > 1 ? "together" : "PR"}<ArrowUpRightIcon /></Button></div>
           {Object.entries(g.pulls).map(([repo, p]) => <div key={repo} className="flex flex-wrap items-center gap-3 text-sm"><GitPullRequestIcon className="size-4 shrink-0 text-muted-foreground" /><button className="min-w-0 flex-1 break-words text-left hover:underline" disabled={busy} onClick={() => void review([p.url])}>{repo} #{p.number} · {p.title}</button><a href={p.url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground underline underline-offset-4">{/\/-\/merge_requests\//.test(p.url) ? "GitLab" : /bitbucket/i.test(p.url) ? "Bitbucket" : "GitHub"}</a></div>)}{g.blockers.length > 0 && <p className="text-xs text-muted-foreground">{g.blockers.join(" · ")}</p>}
-        </section>)}{pullErrors.length > 0 && <div role="alert" className="space-y-1 p-6 text-sm text-destructive">{pullErrors.map(e => <p key={e}>{e}</p>)}<Link href="/settings" className="underline">Open Version control settings</Link></div>}{!pulls.length && !pullErrors.length && <p className="p-6 text-sm text-muted-foreground">No open pull requests. Sync remote to check for new reviews.</p>}</div>}
+        </section>)}{pullErrors.length > 0 && <div role="alert" className="space-y-1 p-6 text-sm text-destructive">{pullErrors.map(e => <p key={e}>{e}</p>)}<button className="underline" onClick={() => setSettingsFor(project)}>Open version control settings</button></div>}{!pulls.length && !pullErrors.length && <p className="p-6 text-sm text-muted-foreground">No open pull requests. Sync remote to check for new reviews.</p>}</div>}
       </main>
     </div>
   </div>;

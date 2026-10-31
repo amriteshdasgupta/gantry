@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Choose each repository's version control provider from a new per-workspace settings modal, opened from the workspace's sidebar entry. Settings now has Agents, Version control (access tokens) and Chats tabs.
 - Adopt the original Routed G logo: white on violet across the README, desktop header, browser favicon, and macOS, Windows, and Linux app icons, including the development Dock icon.
 
 ### Fixed
