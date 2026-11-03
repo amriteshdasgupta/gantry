@@ -34,6 +34,6 @@ export function RemoveWorkspaceDialog({ project, onClose, onRemoved }: { project
       </div>
     </div>
     {error && <p role="alert" className="mt-4 text-sm text-destructive">{error}</p>}
-    <div className="mt-6 flex justify-end"><Button variant="ghost" disabled={busy} onClick={onClose}>Cancel</Button></div>
+    <div className="mt-6 flex justify-end"><Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button></div>
   </dialog>;
 }
