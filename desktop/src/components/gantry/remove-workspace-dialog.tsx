@@ -21,16 +21,16 @@ export function RemoveWorkspaceDialog({ project, onClose, onRemoved }: { project
     catch (e) { setError((e as Error).message); setBusy(false); }
   }
   return <dialog ref={ref} aria-labelledby="remove-workspace-title" onCancel={e => { e.preventDefault(); if (!busy) onClose(); }} className="fixed inset-0 m-auto max-h-[85dvh] w-[min(36rem,calc(100vw-32px))] overflow-auto rounded-xl border bg-popover p-6 text-popover-foreground shadow-xl backdrop:bg-black/50">
-    <h2 id="remove-workspace-title" className="text-lg font-semibold">Remove {project.name}?</h2>
-    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Its previews stop and it leaves Gantry. Your repositories, worktrees and gantry.yaml in {project.workspace} are not changed.</p>
-    <div className="mt-4 space-y-3">
+    <h2 id="remove-workspace-title" className="text-lg font-semibold">Remove {project.name} from Gantry?</h2>
+    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Any running previews will stop. Your files in {project.workspace} won&apos;t be touched, including repositories, worktrees and gantry.yaml.</p>
+    <div className="mt-4 grid gap-4 sm:grid-cols-2">
       <div>
-        <Button variant="outline" className="w-full" disabled={busy} onClick={() => void remove(false)}>Remove and keep data</Button>
-        <p className="mt-1 text-xs text-muted-foreground">Tickets and history stay on this machine and return if you add this workspace again.</p>
+        <Button variant="outline" className="w-full" disabled={busy} onClick={() => void remove(false)}>Keep data</Button>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Gantry saves your tickets and history. Add the workspace again later to get them back.</p>
       </div>
       <div>
-        <Button variant="destructive" className="w-full" disabled={busy} onClick={() => void remove(true)}>Remove and delete data</Button>
-        <p className="mt-1 text-xs text-muted-foreground">Permanently deletes this workspace&apos;s tickets, run history, logs, artifacts, chats and settings from Gantry.</p>
+        <Button variant="destructive" className="w-full" disabled={busy} onClick={() => void remove(true)}>Delete data</Button>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Gantry permanently deletes your tickets, run history, logs, artifacts, chats and settings for this workspace. You can&apos;t undo this.</p>
       </div>
     </div>
     {error && <p role="alert" className="mt-4 text-sm text-destructive">{error}</p>}
