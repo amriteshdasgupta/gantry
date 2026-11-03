@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-03
+
+### Added
+
+- Remove a workspace from its sidebar menu, either keeping its Gantry data so adding it back restores everything, or deleting that data. Repositories, worktrees and `gantry.yaml` are never touched.
+- Give tickets persistent human assistant names and a workspace voice console: address master chats by name, dictate with Wispr Flow, transcribe with a configured local Parakeet/Whisper-compatible service, hear local spoken replies, and inspect, pause or resume in-progress workflows together.
+- Create and edit workspace and ticket graph drafts with an inline AI assistant, using configured providers to propose nodes, stage prompts, and routing conditions. Keep the canvas editable, reject stale proposals, and undo assistant changes before saving.
+
+### Changed
+
+- Choose each repository's version control provider from a new per-workspace settings modal, opened from the workspace's sidebar entry. Settings now has Agents, Version control (access tokens) and Chats tabs.
+- Adopt the original Routed G logo: white on violet across the README, desktop header, browser favicon, and macOS, Windows, and Linux app icons, including the development Dock icon.
+
+### Fixed
+
+- Keep pending voice clips bound to their original ticket, serialize recording-mode transitions, and persist collision-free assistant names for legacy tickets.
+- Let the graph assistant repair incomplete automatic graph drafts, including disconnected nodes and missing start nodes, while requiring fully valid replacement graphs.
+- Preserve in-progress PR review replies when a delayed local-worktree refresh arrives.
+
 ## [0.1.1] - 2026-10-26
 
 ### Fixed

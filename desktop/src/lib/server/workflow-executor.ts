@@ -66,6 +66,10 @@ const file = (id: string) => {
   if (!/^[\w-]+$/.test(id)) throw new Error('Invalid ticket.');
   return path.join(root, `${id}.json`);
 };
+export function forgetExecution(id: string) {
+  engine.runs.delete(id);
+  fs.rmSync(file(id), { force: true });
+}
 export function executionFor(id: string): Execution | null {
   try {
     const run: Execution = JSON.parse(fs.readFileSync(file(id), 'utf8'));

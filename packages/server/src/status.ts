@@ -130,7 +130,7 @@ export async function buildStatus(app: GantryApp): Promise<Record<string, unknow
     const remoteErrors: Record<string, unknown> = {};
     for (const repo of project.config.repositories) {
       const snapshot = app.remote.snapshotFor(projectId, repo.id);
-      if (snapshot) remoteErrors[`${projectId}:${repo.id}`] = { checkedAt: snapshot.checkedAt, error: snapshot.error };
+      if (snapshot) remoteErrors[`${projectId}:${repo.id}`] = { checkedAt: snapshot.checkedAt, error: snapshot.error, pullError: app.remote.pullErrors.get(`${projectId}:${repo.id}`) ?? null };
     }
     remoteView.push({ projectId, repositories: remoteErrors, lastSyncAt: app.remote.lastSyncAt });
 
@@ -144,6 +144,7 @@ export async function buildStatus(app: GantryApp): Promise<Record<string, unknow
         id: ticket.id,
         projectId,
         title: ticket.title,
+        assistantName: ticket.assistant_name,
         description: ticket.description,
         status: ticket.status,
         scope: ticket.scope,

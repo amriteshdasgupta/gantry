@@ -26,11 +26,15 @@ import { PreviewPane } from "./preview-pane";
 import { GraphStatus, TicketWorkflow, graphSummary } from "./workflow";
 import { SetupCheck } from "./setup-check";
 import { AddWorkspaceDialog } from "./add-workspace-dialog";
+import { WorkspaceActionsMenu } from "./workspace-actions-menu";
+import { RemoveWorkspaceDialog } from "./remove-workspace-dialog";
+import { WorkspaceSettingsDialog } from "./workspace-settings-dialog";
 import { DeleteTicketDialog } from "./delete-ticket-dialog";
 import { CleanupWorktreesDialog } from "./cleanup-worktrees-dialog";
 import { TicketDialog } from "./ticket-dialog";
 import { TicketConversation, ticketChatRequest, openTicketChat } from "./ticket-chat";
 import { TicketOutcome } from "./ticket-outcome";
+import { VoiceConsole } from './voice-console';
 import { confirmGraphNavigation, useGraphNavigationGuard, useUnsavedGraph } from "@/lib/client/unsaved-graph";
 
 type Area = "tickets" | "reviews" | "previews" | "workflow";
@@ -65,7 +69,10 @@ export function GantryWorkspace() {
   const [creating, setCreating] = useState(false);
   const [editingTicket, setEditingTicket] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [settingsFor, setSettingsFor] = useState<ProjectView | null>(null);
+  const [removing, setRemoving] = useState<ProjectView | null>(null);
   const [busy, setBusy] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const pendingMoves = useRef(new Set<string>());
   const [movingTickets, setMovingTickets] = useState<Set<string>>(new Set());
   const [log, setLog] = useState<{ title: string; text: string } | null>(null);
@@ -148,6 +155,7 @@ export function GantryWorkspace() {
   const ticketColor = useTicketColors(project?.id ?? "", tickets);
   const doneBranch = (branch: string) => tickets.some(t => t.branch === branch && t.status !== "in_progress");
   const previews = data?.previews.filter((p) => p.projectId === project?.id && (p.isPrimary || !doneBranch(p.branch))) ?? [];
+  const pullErrors = Object.entries(data?.remote?.find(r => r.projectId === project?.id)?.repositories ?? {}).flatMap(([key, r]) => r.pullError ? [`${key.slice(key.indexOf(":") + 1)}: ${r.pullError}`] : []);
   const pulls = data?.pulls.filter((p) => p.projectId === project?.id && !doneBranch(p.branch)) ?? [];
   const ticket = tickets.find((t) => t.id === selected);
   const previewEntries = [{ id: "main", name: "Main", preview: previews.find(p => p.isPrimary) }, ...tickets.filter(t => t.status === "in_progress").map(t => ({ id: t.id, name: t.title.replace(/^.*\//, "").replace(/-+/g, " ").trim(), preview: previews.find(p => !p.isPrimary && p.branch === t.branch) }))];
@@ -155,6 +163,18 @@ export function GantryWorkspace() {
   const ticketPreviews = previews.filter(p => p.branch === ticket?.branch && !p.isPrimary);
   const jobs = data?.jobs.filter((j) => j.projectId === project?.id && ["queued", "running", "failed"].includes(j.state)).slice(0, 5) ?? [];
 
+  function enterWorkspace(id: string) {
+    reviewNavigation.invalidate();
+    setReviewSpace(null);
+    setArea("tickets");
+    setProjectId(id);
+    setSelected(null);
+    setPreviewTicket("main");
+    setTicketTab("details");
+    setEditingTicket(false);
+    setCreating(false);
+    setLog(null);
+  }
   async function act(action: () => Promise<unknown>, message?: string) {
     if (busy) return false;
     setBusy(true);
@@ -167,6 +187,9 @@ export function GantryWorkspace() {
     await act(()=>openTicketChat(owner.id));
   }
   async function review(urls: string[], owner?: TicketView) {
+    // The in-app review space reads GitHub only; GitLab/Bitbucket PRs open on their own site.
+    const external = urls.filter(url => !/^https:\/\/github\.com\//.test(url));
+    if (external.length) { external.forEach(url => window.open(url, "_blank", "noopener")); urls = urls.filter(url => !external.includes(url)); if (!urls.length) return; }
     if (!confirmGraphNavigation()) return;
     await act(async () => {
       const linked = owner ?? tickets.find(t => t.pullRequests.some(p => urls.includes(p.url)) || pulls.some(g => g.branch === t.branch && Object.values(g.pulls).some(p => urls.includes(p.url))));
@@ -247,6 +270,7 @@ export function GantryWorkspace() {
                   <button onClick={() => openTicket(t.id)} className="flex w-full flex-col gap-3 p-3 text-left focus-visible:outline-2 focus-visible:outline-ring" aria-pressed={selected === t.id}>
                     <span className="flex w-full items-start gap-2 break-words text-sm font-semibold"><span aria-hidden="true" className="gantry-ticket-dot mt-1 size-2 shrink-0 rounded-full" /><span className="min-w-0 flex-1">{t.title}</span><TicketReviewStatus ticket={t} groups={data?.pulls ?? []} /></span>
                     <span className="flex max-w-full items-center gap-1.5 text-xs text-muted-foreground"><GitBranchIcon className="size-3 shrink-0" /><span className="truncate font-mono">{t.branch}</span></span>
+                    {t.assistantName && <span className="text-xs text-muted-foreground">Assistant · {t.assistantName}</span>}
                     <TicketPullRequests ticket={t} groups={data?.pulls ?? []} />
                     {t.workflow && <GraphStatus run={t.workflow} execution={t.execution} />}
                     {t.conversation && <span className="text-xs text-muted-foreground">Chat linked · {t.conversation.providerName}</span>}
@@ -259,12 +283,27 @@ export function GantryWorkspace() {
   return <div className="gantry-workspace flex h-full min-h-0 flex-col bg-background">
     {cleaning && <CleanupWorktreesDialog ticketId={cleaning.id} title={cleaning.title} onClose={() => setCleaning(null)} onCleaned={refresh} />}
     {adding && <AddWorkspaceDialog busy={busy} onCancel={() => setAdding(false)} onConnect={dir => void act(() => gantry.addProject(dir), "Workspace connected").then(ok => { if (ok) setAdding(false); })} />}
+    {settingsFor && <WorkspaceSettingsDialog project={settingsFor} onClose={() => setSettingsFor(null)} />}
+    {removing && <RemoveWorkspaceDialog project={removing} onClose={() => setRemoving(null)} onRemoved={() => {
+      const wasCurrent = removing.id === project?.id;
+      setRemoving(null);
+      toast.success(`Removed ${removing.name}`);
+      if (wasCurrent) enterWorkspace("");
+      void refresh();
+    }} />}
     {deleting && <DeleteTicketDialog title={deleting.title} busy={busy} onCancel={() => setDeleting(null)} onDelete={() => void act(() => gantry.deleteTicket(deleting.id), "Ticket deleted").then(ok => { if (ok) { if (selected === deleting.id) closeTicket(); setDeleting(null); } })} />}
     <header className="app-bar flex h-12 shrink-0 items-center gap-3 border-b px-4">
-      <span className="flex items-center gap-2 text-sm font-semibold"><LayoutListIcon className="size-5 text-violet-600 dark:text-violet-300" />Gantry</span>
+      <span className="flex items-center gap-2 text-sm font-semibold">
+        {/* A local SVG keeps the selected mark identical to the launcher artwork. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/gantry-icon.svg" alt="" width={24} height={24} className="size-6 shrink-0" />
+        Gantry
+      </span>
       <div className="flex-1" /><span className="hidden text-xs text-muted-foreground sm:block" role="status">{error ? "Connection interrupted" : data ? "Connected locally" : "Connecting…"}</span>
+      <Button size="sm" variant={voiceOpen ? 'default' : 'outline'} onClick={() => setVoiceOpen(!voiceOpen)}>Voice control</Button>
       <SettingsLink /><ThemeToggle />
     </header>
+    {voiceOpen && <VoiceConsole key={project?.id || ''} tickets={tickets} refresh={refresh} />}
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
       <aside className="flex max-h-[40dvh] shrink-0 flex-col overflow-y-auto border-b bg-muted/20 md:max-h-none md:w-64 md:border-r md:border-b-0">
         <nav aria-label="Workspaces" className="space-y-2 border-b p-3">
@@ -277,31 +316,21 @@ export function GantryWorkspace() {
             const current = project?.id === p.id;
             const active = data.tickets.filter(t => t.projectId === p.id && t.status === "in_progress").length;
 
-            return <Button
-              key={p.id}
+            return <div key={p.id} className="flex items-center gap-1"><Button
               variant="ghost"
-              className={cn("h-auto min-h-12 w-full justify-start border border-transparent px-3 py-2 text-left", current && "border-violet-300 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-950")}
+              className={cn("h-auto min-h-12 min-w-0 flex-1 justify-start border border-transparent px-3 py-2 text-left", current && "border-violet-300 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-950")}
               aria-current={current ? "true" : undefined}
               title={p.workspace}
               onClick={() => {
                 if (current || !confirmGraphNavigation()) return;
-                reviewNavigation.invalidate();
-                setReviewSpace(null);
-                setArea("tickets");
-                setProjectId(p.id);
-                setSelected(null);
-                setPreviewTicket("main");
-                setTicketTab("details");
-                setEditingTicket(false);
-                setCreating(false);
-                setLog(null);
+                enterWorkspace(p.id);
               }}
             >
               <FolderIcon className="size-4 shrink-0" />
               <span className="min-w-0 flex-1 whitespace-normal break-words font-semibold">{p.name}</span>
               {active > 0 && <span className="text-xs tabular-nums" aria-label={`${active} in progress`}>{active}</span>}
               {current && <CheckIcon aria-hidden="true" className="size-4 shrink-0" />}
-            </Button>;
+            </Button><WorkspaceActionsMenu name={p.name} onSettings={() => setSettingsFor(p)} onRemove={() => { if (!current || confirmGraphNavigation()) setRemoving(p); }} /></div>;
           })}
         </nav>
         {project && <section aria-label={`${project.name} navigation`} className="flex flex-1 flex-col gap-4 p-3">
@@ -438,8 +467,8 @@ export function GantryWorkspace() {
         </div>}
         {project && reviewSpace && <div className={area === "reviews" ? "flex min-h-0 flex-1 flex-col" : "hidden"}><ReviewWorkspace key={reviewSpace} projectId={project.id} spaceId={reviewSpace} initialTarget={null} initialFile={null} onNavigateSpace={navigateReview} /></div>}
         {project && area === "reviews" && !reviewSpace && <div className="divide-y">{pulls.map((g) => <section key={g.id} className="space-y-4 p-6"><div className="flex flex-wrap items-center gap-3"><GitBranchIcon className="size-4 text-muted-foreground" /><h2 className="min-w-0 flex-1 break-all font-medium">{g.branch}</h2><State value={g.ready ? "ready" : "blocked"} /><Button size="sm" disabled={busy} onClick={() => void review(Object.values(g.pulls).map((p) => p.url))}>Review {Object.keys(g.pulls).length > 1 ? "together" : "PR"}<ArrowUpRightIcon /></Button></div>
-          {Object.entries(g.pulls).map(([repo, p]) => <div key={repo} className="flex flex-wrap items-center gap-3 text-sm"><GitPullRequestIcon className="size-4 shrink-0 text-muted-foreground" /><button className="min-w-0 flex-1 break-words text-left hover:underline" disabled={busy} onClick={() => void review([p.url])}>{repo} #{p.number} · {p.title}</button><a href={p.url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground underline underline-offset-4">GitHub</a></div>)}{g.blockers.length > 0 && <p className="text-xs text-muted-foreground">{g.blockers.join(" · ")}</p>}
-        </section>)}{!pulls.length && <p className="p-6 text-sm text-muted-foreground">No open pull requests. Sync remote to check for new reviews.</p>}</div>}
+          {Object.entries(g.pulls).map(([repo, p]) => <div key={repo} className="flex flex-wrap items-center gap-3 text-sm"><GitPullRequestIcon className="size-4 shrink-0 text-muted-foreground" /><button className="min-w-0 flex-1 break-words text-left hover:underline" disabled={busy} onClick={() => void review([p.url])}>{repo} #{p.number} · {p.title}</button><a href={p.url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground underline underline-offset-4">{/\/-\/merge_requests\//.test(p.url) ? "GitLab" : /bitbucket/i.test(p.url) ? "Bitbucket" : "GitHub"}</a></div>)}{g.blockers.length > 0 && <p className="text-xs text-muted-foreground">{g.blockers.join(" · ")}</p>}
+        </section>)}{pullErrors.length > 0 && <div role="alert" className="space-y-1 p-6 text-sm text-destructive">{pullErrors.map(e => <p key={e}>{e}</p>)}<button className="underline" onClick={() => setSettingsFor(project)}>Open version control settings</button></div>}{!pulls.length && !pullErrors.length && <p className="p-6 text-sm text-muted-foreground">No open pull requests. Sync remote to check for new reviews.</p>}</div>}
       </main>
     </div>
   </div>;

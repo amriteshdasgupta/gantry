@@ -4,10 +4,35 @@ import path from 'node:path';
 
 const runtimeUrl = `http://127.0.0.1:${process.env.GANTRY_E2E_RUNTIME_PORT ?? 3458}`;
 
+test('Gantry serves its selected logo and browser icons locally', async ({ page }) => {
+  await page.goto('/');
+  const logo = page.locator('.app-bar img[src="/gantry-icon.svg"]');
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute('alt', '');
+  expect(await logo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+
+  const svg = await page.request.get('/gantry-icon.svg');
+  expect(svg.ok()).toBe(true);
+  expect(await svg.text()).toContain('#6D28D9');
+
+  const icons = await page.locator('link[rel="icon"]').evaluateAll(links =>
+    links.map(link => (link as HTMLLinkElement).href),
+  );
+  expect(icons.some(url => new URL(url).pathname === '/favicon.ico')).toBe(true);
+  expect(icons.some(url => new URL(url).pathname === '/icon.svg')).toBe(true);
+
+  for (const url of icons) {
+    expect(new URL(url).origin).toBe(new URL(page.url()).origin);
+    const response = await page.request.get(url);
+    expect(response.ok()).toBe(true);
+    expect((await response.body()).length).toBeGreaterThan(0);
+  }
+});
+
 test('Gantry ticket, preview and review workflow stays inside Gantry', async ({ page }) => {
   const initialSpaces = await (await page.request.get('/api/spaces')).json();
   await page.goto('/');
-  await expect(page.getByRole('navigation',{name:'Workspaces'}).getByRole('button',{name:'Fixture workspace'})).toBeVisible();
+  await expect(page.getByRole('navigation',{name:'Workspaces'}).getByRole('button',{name:/^Fixture workspace/})).toBeVisible();
   await page.getByRole('button', {name:'New ticket',exact:true}).click();
   await page.getByLabel('Title', {exact:true}).fill('Draft ticket');
   await page.getByLabel('Notes', {exact:true}).fill('Keep the review in this app.');
@@ -101,7 +126,7 @@ test('workspace hierarchy keeps reviews, previews and deep links in their owning
     await expect(page.getByRole('menuitem', { name: 'New space', exact: true })).toHaveCount(0);
     await page.keyboard.press('Escape');
 
-    await workspaces.getByRole('button', { name: 'Other workspace' }).click();
+    await workspaces.getByRole('button', { name: /^Other workspace/ }).click();
     await expect(context).toHaveText('Other workspace/Tickets');
     await expect(page).not.toHaveURL(/review=/);
     await expect(page.getByRole('region', { name: 'Ticket board' })).toContainText('Second workspace work');
@@ -121,7 +146,7 @@ test('workspace hierarchy keeps reviews, previews and deep links in their owning
     await page.getByRole('navigation', { name: 'Gantry workspace', exact: true }).getByRole('button', { name: /Tickets/ }).click();
     await expect(context).toHaveText('Fixture workspace/Tickets');
 
-    await workspaces.getByRole('button', { name: 'Other workspace' }).click();
+    await workspaces.getByRole('button', { name: /^Other workspace/ }).click();
     await expect(previews.getByRole('button', { name: 'Second workspace work', exact: true })).not.toHaveAttribute('aria-current', 'page');
     await previews.getByRole('button', { name: 'Main', exact: true }).click();
     await expect(previews.getByRole('button', { name: 'Main', exact: true })).toHaveAttribute('aria-current', 'page');
@@ -164,7 +189,7 @@ test('Gantry follows the review app themes and desktop window sizes', async ({ p
   await page.waitForTimeout(250); // Let shared control and theme transitions settle for visual review.
   await page.screenshot({path:'e2e/.tmp/incumbent-home.png'});
   await page.goto('/');
-  await expect(page.getByRole('navigation',{name:'Workspaces'}).getByRole('button',{name:'Fixture workspace'})).toBeVisible();
+  await expect(page.getByRole('navigation',{name:'Workspaces'}).getByRole('button',{name:/^Fixture workspace/})).toBeVisible();
   await page.getByRole('button',{name:'New ticket',exact:true}).click();
   await page.getByLabel('Title', {exact:true}).fill('Keep branch previews stable across restarts');
   await page.getByLabel('Notes', {exact:true}).fill('Reuse managed services when their configuration is unchanged. Verify that the agent can prepare the branch, open a preview, and hand it over for review.');
@@ -247,7 +272,7 @@ test('workspace tickets own stable spaces and collect all associated PRs', async
     await expect(page.getByRole('navigation',{name:'Workspaces'}).locator('[aria-current="true"]')).toContainText('Fixture workspace');
     await expect(page.getByRole('region',{name:'Ticket details'})).toBeVisible();
     await page.getByRole('button',{name:'Close details',exact:true}).click();
-    await page.getByRole('navigation',{name:'Workspaces'}).getByRole('button',{name:'Other workspace'}).click();
+    await page.getByRole('navigation',{name:'Workspaces'}).getByRole('button', { name: /^Other workspace/ }).click();
     await page.getByRole('button',{name:'Open review space for Shared title',exact:true}).click();
     await expect(page).toHaveURL(new RegExp(`review=${two.id}`));
     await expect(page.getByRole('tab')).toHaveCount(0);

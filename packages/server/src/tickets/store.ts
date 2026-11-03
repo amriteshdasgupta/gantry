@@ -1,4 +1,4 @@
-import { newId, isValidBranchName, branchFor, newWorkflow, type Workflow } from '@gantry/shared';
+import { assistantNameFor, newId, isValidBranchName, branchFor, newWorkflow, type Workflow } from '@gantry/shared';
 import type { Database } from '../db/db.js';
 
 /**
@@ -13,6 +13,7 @@ export interface TicketRow {
   id: string;
   project_id: string;
   title: string;
+  assistant_name?: string | null;
   description: string;
   status: 'backlog' | 'in_progress' | 'done';
   scope: string;
@@ -39,6 +40,7 @@ export class TicketError extends Error {}
 
 export interface TicketInput {
   title: string;
+  assistantName?: string;
   description?: string;
   status?: string;
   scope?: string;
@@ -79,16 +81,48 @@ export class TicketStore {
   constructor(private readonly db: Database) {}
 
   all(projectId: string): TicketRow[] {
+    this.ensureAssistantNames(projectId);
     const rows = this.db.prepare('SELECT * FROM tickets WHERE project_id=? ORDER BY status, position, created_at').all(projectId) as unknown as TicketRow[];
     return rows.map(readTicketScopes);
   }
 
   get(id: string): TicketRow | null {
     const row = this.db.prepare('SELECT * FROM tickets WHERE id=?').get(id) as TicketRow | undefined;
+    if (row && !row.assistant_name) {
+      this.ensureAssistantNames(row.project_id);
+      return this.get(id);
+    }
     return row ? readTicketScopes(row) : null;
   }
 
+  /** Reserve legacy names together, before any one ticket's name becomes visible. */
+  private ensureAssistantNames(projectId: string): void {
+    const missing = this.db.prepare("SELECT id FROM tickets WHERE project_id=? AND (assistant_name IS NULL OR assistant_name='') LIMIT 1").get(projectId);
+    if (!missing) return;
+
+    this.db.exec('SAVEPOINT ticket_assistant_names');
+    try {
+      const rows = this.db.prepare('SELECT id, assistant_name FROM tickets WHERE project_id=? ORDER BY id').all(projectId) as { id: string; assistant_name: string | null }[];
+      const usedNames = new Set(rows.filter(row => row.assistant_name).map(row => row.assistant_name!.toLowerCase()));
+      const save = this.db.prepare('UPDATE tickets SET assistant_name=? WHERE id=?');
+
+      for (const row of rows) {
+        if (row.assistant_name) continue;
+        const name = availableAssistantName(row.id, usedNames);
+        save.run(name, row.id);
+        usedNames.add(name.toLowerCase());
+      }
+
+      this.db.exec('RELEASE ticket_assistant_names');
+    } catch (error) {
+      this.db.exec('ROLLBACK TO ticket_assistant_names');
+      this.db.exec('RELEASE ticket_assistant_names');
+      throw error;
+    }
+  }
+
   create(projectId: string, input: TicketInput, scopes: string[], branchPrefix: string, workflow?: Workflow): TicketRow {
+    this.validateAssistantName(projectId, input.assistantName);
     const validated = validateTicketInput(input, undefined, branchPrefix);
     if (input.scopes === undefined && input.scope === undefined) validated.scopes = [...scopes];
     if (validated.scopes != null) {
@@ -99,8 +133,11 @@ export class TicketStore {
       throw new TicketError(`Unknown ticket scope "${validated.scope}".`);
     }
     const now = new Date().toISOString();
+    const id = newId();
+    const usedNames = new Set(this.all(projectId).map(ticket => ticket.assistant_name!.toLowerCase()));
     const ticket: TicketRow = {
-      id: newId(),
+      id,
+      assistant_name: input.assistantName?.trim() || availableAssistantName(id, usedNames),
       project_id: projectId,
       ...validated,
       position: 0,
@@ -113,17 +150,19 @@ export class TicketStore {
     // take position 0 and shift the rest down.
     this.db
       .prepare(
-        `INSERT INTO tickets (id, project_id, title, description, status, scope, branch, additions, position, active_run_id, created_at, updated_at, workflow_json, scopes_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tickets (id, project_id, title, description, status, scope, branch, additions, position, active_run_id, created_at, updated_at, workflow_json, scopes_json, assistant_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(ticket.id, ticket.project_id, ticket.title, ticket.description, ticket.status, ticket.scope, ticket.branch, ticket.additions, ticket.position, null, ticket.created_at, ticket.updated_at, ticket.workflow_json!, validated.scopes == null ? null : JSON.stringify(validated.scopes));
+      .run(ticket.id, ticket.project_id, ticket.title, ticket.description, ticket.status, ticket.scope, ticket.branch, ticket.additions, ticket.position, null, ticket.created_at, ticket.updated_at, ticket.workflow_json!, validated.scopes == null ? null : JSON.stringify(validated.scopes), ticket.assistant_name!);
     this.db.prepare('UPDATE tickets SET position = position + 1 WHERE project_id=? AND status=? AND id != ?').run(projectId, ticket.status, ticket.id);
+
     return this.get(ticket.id)!;
   }
 
   update(id: string, input: TicketInput, scopes: string[], branchPrefix: string): TicketRow {
     const previous = this.get(id);
     if (!previous) throw new TicketError('Ticket not found.');
+    this.validateAssistantName(previous.project_id, input.assistantName, id);
     const validated = validateTicketInput(input, previous, branchPrefix);
     if (input.scopes !== undefined) {
       for (const id of validated.scopes ?? []) {
@@ -133,6 +172,7 @@ export class TicketStore {
       throw new TicketError(`Unknown ticket scope "${validated.scope}".`);
     }
     const statusChanged = validated.status !== previous.status;
+    if (input.assistantName !== undefined) this.db.prepare('UPDATE tickets SET assistant_name=? WHERE id=?').run(input.assistantName.trim(), id);
     this.db
       .prepare('UPDATE tickets SET title=?, description=?, status=?, scope=?, branch=?, additions=?, updated_at=?, scopes_json=? WHERE id=?')
       .run(validated.title, validated.description, validated.status, validated.scope, validated.branch, validated.additions, new Date().toISOString(), validated.scopes == null ? null : JSON.stringify(validated.scopes), id);
@@ -150,6 +190,17 @@ export class TicketStore {
       .prepare('UPDATE tickets SET status=COALESCE(?, status), active_run_id=COALESCE(?, active_run_id), additions=COALESCE(?, additions), updated_at=? WHERE id=?')
       .run(values.status ?? null, values.active_run_id ?? null, values.additions ?? null, new Date().toISOString(), id);
     return this.get(id)!;
+  }
+
+  private validateAssistantName(projectId: string, name: unknown, exceptId?: string): void {
+    if (name === undefined) return;
+    if (typeof name !== 'string' || !/^[A-Za-z][A-Za-z '-]{1,39}$/.test(name.trim())) {
+      throw new TicketError('Assistant name must be 2–40 letters, spaces, apostrophes or hyphens.');
+    }
+    if (name.trim().toLowerCase() === 'gantry') throw new TicketError('Gantry is reserved for workspace voice commands.');
+    if (this.all(projectId).some(ticket => ticket.id !== exceptId && ticket.assistant_name?.toLowerCase() === name.trim().toLowerCase())) {
+      throw new TicketError('Another ticket in this workspace already uses that assistant name.');
+    }
   }
 
   /** Set or clear a ticket's final notes. Kept apart from update() so stages can write it without touching other fields. */
@@ -213,6 +264,7 @@ export class TicketStore {
   /** Move tickets to Done once their branches are confirmed merged. */
   completeMergedBranches(projectId: string, branches: Set<string>): TicketRow[] {
     if (!branches.size) return [];
+    this.ensureAssistantNames(projectId);
     const now = new Date().toISOString();
     const tickets = this.db.prepare("SELECT * FROM tickets WHERE project_id=? AND status != 'done'").all(projectId) as unknown as TicketRow[];
     const completed: TicketRow[] = [];
@@ -223,6 +275,14 @@ export class TicketStore {
     }
     return completed;
   }
+}
+
+function availableAssistantName(id: string, usedNames: Set<string>): string {
+  let name = assistantNameFor(id);
+  for (let attempt = 1; usedNames.has(name.toLowerCase()); attempt++) {
+    name = `${name} ${assistantNameFor(`${id}-${attempt}`).split(' ')[1]}`;
+  }
+  return name;
 }
 
 function readTicketScopes(row: TicketRow): TicketRow {

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('moving tickets keeps other chats and reviews available without automatic launch', async ({ page }) => {
+test('moving tickets keeps other chats and reviews available without automatic launch', async ({ page }, testInfo) => {
   const label = 'TEST_f84f8f57';
   const tickets = [
     { id: 'move', title: `${label}_move`, status: 'backlog' },
@@ -79,5 +79,7 @@ test('moving tickets keeps other chats and reviews available without automatic l
   expect(opens).toEqual(['other']);
   expect(unexpected).toEqual([]);
   await page.getByRole('button', { name: 'Close details', exact: true }).click();
-  await page.screenshot({ path: process.env.GANTRY_EVIDENCE_DIR ? `${process.env.GANTRY_EVIDENCE_DIR}/final.png` : 'test-results/ticket-movement.png', fullPage: true });
+  const evidenceDir = process.env.GANTRY_EVIDENCE_DIR;
+  const screenshot = evidenceDir && evidenceDir !== 'undefined' ? `${evidenceDir}/final.png` : testInfo.outputPath('final.png');
+  await page.screenshot({ path: screenshot, fullPage: true });
 });

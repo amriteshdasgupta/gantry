@@ -27,7 +27,7 @@ export default defineConfig({
     reuseExistingServer: false,
   }, {
     // E2E_BUNDLE=1 tests the server the Mac app ships (run `npm run app:bundle` first).
-    command: process.env.E2E_BUNDLE
+    command: process.env.E2E_BUNDLE || process.env.E2E_APP
       ? `node e2e/setup.mjs && node .next/standalone/server.js`
       : `node e2e/setup.mjs && next dev -p ${PORT}`,
     url: `http://localhost:${PORT}`,

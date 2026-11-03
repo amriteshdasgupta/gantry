@@ -10,6 +10,7 @@ import { canvasWorkflow, nodePositions } from '@/lib/client/workflow-graph';
 import { exportWorkflow, importWorkflow } from '../../../../packages/shared/src/workflow';
 import { WorkspacePromptDialog } from './workspace-prompt-dialog';
 import { confirmGraphNavigation, useUnsavedGraph } from '@/lib/client/unsaved-graph';
+import { GraphAssistant } from './graph-assistant';
 
 type Node = Workflow['nodes'][number];
 type Edge = NonNullable<Workflow['edges']>[number];
@@ -90,11 +91,14 @@ function NodeEditor({
       });
     return () => abort.abort();
   }, [draft.providerId]);
-  const efforts =
-    models.find((m) => m.id === (draft.model || provider?.model))?.efforts ??
-    ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+  const efforts = models.find((m) => m.id === (draft.model || provider?.model))?.efforts ?? ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
   return (
-    <EditorDialog title="Edit node" onClose={() => { if (edits.confirmDiscard()) onClose(); }}>
+    <EditorDialog
+      title="Edit node"
+      onClose={() => {
+        if (edits.confirmDiscard()) onClose();
+      }}
+    >
       <form
         className="space-y-5"
         onSubmit={(e) => {
@@ -260,6 +264,7 @@ export function WorkflowCanvas({
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [zoom, setZoom] = useState(0.85);
   const [busy, setBusy] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [error, setError] = useState('');
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -274,7 +279,9 @@ export function WorkflowCanvas({
   const selectedNode = nodes.find((n) => n.id === selected);
   const selectedEdge = edges.find((e) => e.id === edgeId);
   const dirty = JSON.stringify(graph) !== saved;
-  const edits = useUnsavedGraph(dirty && !onChange, () => { if (draftKey) sessionStorage.removeItem(draftKey); });
+  const edits = useUnsavedGraph(dirty && !onChange, () => {
+    if (draftKey) sessionStorage.removeItem(draftKey);
+  });
   const edgeEdits = useUnsavedGraph(!!selectedEdge && edgeLabel !== selectedEdge.label);
   const width = Math.max(1400, ...Object.values(positions).map((p) => p.x + 400));
   const height = Math.max(800, ...Object.values(positions).map((p) => p.y + 300));
@@ -394,8 +401,20 @@ export function WorkflowCanvas({
       <div className="flex flex-wrap items-center gap-3 border-b px-5 py-4">
         {header}
         <div className="ml-auto flex flex-wrap items-center gap-3">
+          <Button size="sm" variant="outline" aria-expanded={assistantOpen} onClick={() => setAssistantOpen((open) => !open)}>
+            {assistantOpen ? 'Hide assistant' : 'Ask AI'}
+          </Button>
           {templateProjectId && (
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => { setTemplateError(''); setTemplateSaved(false); setTemplateOpen(true); }}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setTemplateError('');
+                setTemplateSaved(false);
+                setTemplateOpen(true);
+              }}
+            >
               Add as workspace graph template
             </Button>
           )}
@@ -458,7 +477,13 @@ export function WorkflowCanvas({
             Add node
           </Button>
           {onCancel && (
-            <Button size="sm" variant="ghost" onClick={() => { if (edits.confirmDiscard()) onCancel(); }}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                if (edits.confirmDiscard()) onCancel();
+              }}
+            >
               Cancel
             </Button>
           )}
@@ -469,32 +494,55 @@ export function WorkflowCanvas({
           )}
         </div>
       </div>
-      {templateSaved && <p role="status" className="px-5 py-2 text-sm">Workspace graph template added.</p>}
+      {templateSaved && (
+        <p role="status" className="px-5 py-2 text-sm">
+          Workspace graph template added.
+        </p>
+      )}
       {templateOpen && templateProjectId && (
-        <EditorDialog title="Add workspace graph template" onClose={() => { if (!busy) setTemplateOpen(false); }}>
-          <form className="space-y-4" onSubmit={async (event) => {
-            event.preventDefault();
-            setBusy(true);
-            setTemplateError('');
+        <EditorDialog
+          title="Add workspace graph template"
+          onClose={() => {
+            if (!busy) setTemplateOpen(false);
+          }}
+        >
+          <form
+            className="space-y-4"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setBusy(true);
+              setTemplateError('');
 
-            try {
-              await gantry.saveWorkspaceWorkflowTemplate(templateProjectId, templateName.trim(), graph);
-              setTemplateOpen(false);
-              setTemplateName('');
-              setTemplateSaved(true);
-              await onTemplateAdded?.();
-            } catch (error) {
-              setTemplateError((error as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}>
+              try {
+                await gantry.saveWorkspaceWorkflowTemplate(templateProjectId, templateName.trim(), graph);
+                setTemplateOpen(false);
+                setTemplateName('');
+                setTemplateSaved(true);
+                await onTemplateAdded?.();
+              } catch (error) {
+                setTemplateError((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
             <p className="text-sm text-muted-foreground">Save the current graph draft for future tickets. Ticket progress is not included.</p>
-            <label className="block space-y-2 text-sm">Template name<Input required maxLength={80} value={templateName} disabled={busy} onChange={event => setTemplateName(event.target.value)} /></label>
-            {templateError && <p role="alert" className="text-sm text-destructive">{templateError}</p>}
+            <label className="block space-y-2 text-sm">
+              Template name
+              <Input required maxLength={80} value={templateName} disabled={busy} onChange={(event) => setTemplateName(event.target.value)} />
+            </label>
+            {templateError && (
+              <p role="alert" className="text-sm text-destructive">
+                {templateError}
+              </p>
+            )}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" disabled={busy} onClick={() => setTemplateOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={busy || !templateName.trim()}>{busy ? 'Adding…' : 'Add template'}</Button>
+              <Button type="button" variant="ghost" disabled={busy} onClick={() => setTemplateOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy || !templateName.trim()}>
+                {busy ? 'Adding…' : 'Add template'}
+              </Button>
             </div>
           </form>
         </EditorDialog>
@@ -531,195 +579,212 @@ export function WorkflowCanvas({
           {error}
         </p>
       )}
-      <div className="relative min-h-[420px] flex-1 overflow-hidden">
-        <div
-          ref={viewport}
-          aria-label="Workflow canvas"
-          className="h-full w-full touch-none overflow-auto bg-muted/15"
-          style={{ backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)', backgroundSize: `${24 * zoom}px ${24 * zoom}px` }}
-          onPointerMove={pointerMove}
-          onPointerUp={pointerUp}
-          onPointerCancel={() => {
-            drag.current = null;
-            setConnecting(null);
-            setCursor(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
+      <div className="flex min-h-[420px] flex-1 overflow-x-auto">
+        <div className="relative min-h-[420px] min-w-[320px] flex-1 overflow-hidden">
+          <div
+            ref={viewport}
+            aria-label="Workflow canvas"
+            className="h-full w-full touch-none overflow-auto bg-muted/15"
+            style={{ backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)', backgroundSize: `${24 * zoom}px ${24 * zoom}px` }}
+            onPointerMove={pointerMove}
+            onPointerUp={pointerUp}
+            onPointerCancel={() => {
+              drag.current = null;
               setConnecting(null);
               setCursor(null);
-            }
-          }}
-        >
-          <div
-            style={{ width: width * zoom, height: height * zoom }}
-            onPointerDown={(e) => {
-              if ((e.target as HTMLElement).closest('button,[data-workflow-node]')) return;
-              drag.current = { x: e.clientX, y: e.clientY, originX: viewport.current!.scrollLeft, originY: viewport.current!.scrollTop, moved: false };
-              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setConnecting(null);
+                setCursor(null);
+              }
             }}
           >
-            <div className="relative origin-top-left pointer-events-none" style={{ width, height, transform: `scale(${zoom})` }}>
-              <svg className="pointer-events-none absolute inset-0 overflow-visible text-muted-foreground" width={width} height={height} aria-hidden="true">
-                <defs>
-                  <marker id="workflow-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
-                    <path d="M 0 0 L 9 4.5 L 0 9" fill="currentColor" />
-                  </marker>
-                </defs>
+            <div
+              style={{ width: width * zoom, height: height * zoom }}
+              onPointerDown={(e) => {
+                if ((e.target as HTMLElement).closest('button,[data-workflow-node]')) return;
+                drag.current = { x: e.clientX, y: e.clientY, originX: viewport.current!.scrollLeft, originY: viewport.current!.scrollTop, moved: false };
+                e.currentTarget.setPointerCapture(e.pointerId);
+              }}
+            >
+              <div className="relative origin-top-left pointer-events-none" style={{ width, height, transform: `scale(${zoom})` }}>
+                <svg className="pointer-events-none absolute inset-0 overflow-visible text-muted-foreground" width={width} height={height} aria-hidden="true">
+                  <defs>
+                    <marker id="workflow-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                      <path d="M 0 0 L 9 4.5 L 0 9" fill="currentColor" />
+                    </marker>
+                  </defs>
+                  {edges.map((edge) => {
+                    const a = positions[edge.source],
+                      b = positions[edge.target];
+                    if (!a || !b) return null;
+                    const sx = a.x + 230,
+                      sy = a.y + 48,
+                      tx = b.x,
+                      ty = b.y + 48;
+                    const bend = Math.max(70, Math.abs(tx - sx) * 0.45);
+                    const d =
+                      tx > sx
+                        ? `M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`
+                        : `M ${sx} ${sy} C ${sx + 100} ${sy + 160}, ${tx - 100} ${ty + 160}, ${tx} ${ty}`;
+                    return (
+                      <g key={edge.id}>
+                        <path d={d} fill="none" stroke="currentColor" strokeWidth="1.6" markerEnd="url(#workflow-arrow)" />
+                        <path
+                          d={d}
+                          fill="none"
+                          stroke="transparent"
+                          strokeWidth="18"
+                          className="pointer-events-auto cursor-pointer"
+                          onClick={() => editEdge(edge)}
+                        />
+                      </g>
+                    );
+                  })}
+                  {connecting && cursor && (
+                    <path
+                      d={`M ${positions[connecting].x + 230} ${positions[connecting].y + 48} L ${cursor.x} ${cursor.y}`}
+                      fill="none"
+                      stroke="var(--primary)"
+                      strokeWidth="2"
+                      strokeDasharray="5 5"
+                    />
+                  )}
+                </svg>
                 {edges.map((edge) => {
                   const a = positions[edge.source],
                     b = positions[edge.target];
                   if (!a || !b) return null;
-                  const sx = a.x + 230,
-                    sy = a.y + 48,
-                    tx = b.x,
-                    ty = b.y + 48;
-                  const bend = Math.max(70, Math.abs(tx - sx) * 0.45);
-                  const d =
-                    tx > sx
-                      ? `M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`
-                      : `M ${sx} ${sy} C ${sx + 100} ${sy + 160}, ${tx - 100} ${ty + 160}, ${tx} ${ty}`;
+                  const backwards = b.x <= a.x + 230;
                   return (
-                    <g key={edge.id}>
-                      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.6" markerEnd="url(#workflow-arrow)" />
-                      <path
-                        d={d}
-                        fill="none"
-                        stroke="transparent"
-                        strokeWidth="18"
-                        className="pointer-events-auto cursor-pointer"
-                        onClick={() => editEdge(edge)}
-                      />
-                    </g>
+                    <button
+                      key={edge.id}
+                      type="button"
+                      aria-label={`Edit connection ${nodes.find((n) => n.id === edge.source)?.label} to ${nodes.find((n) => n.id === edge.target)?.label}`}
+                      title={edge.label}
+                      onClick={() => editEdge(edge)}
+                      className="pointer-events-auto absolute max-w-56 -translate-x-1/2 -translate-y-1/2 line-clamp-2 whitespace-normal break-words rounded-md border bg-background px-2.5 py-1 text-xs text-muted-foreground shadow-sm hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                      style={{ left: (a.x + 230 + b.x) / 2, top: (a.y + b.y) / 2 + 48 + (backwards ? 120 : 0) }}
+                    >
+                      {edge.label}
+                    </button>
                   );
                 })}
-                {connecting && cursor && (
-                  <path
-                    d={`M ${positions[connecting].x + 230} ${positions[connecting].y + 48} L ${cursor.x} ${cursor.y}`}
-                    fill="none"
-                    stroke="var(--primary)"
-                    strokeWidth="2"
-                    strokeDasharray="5 5"
-                  />
-                )}
-              </svg>
-              {edges.map((edge) => {
-                const a = positions[edge.source],
-                  b = positions[edge.target];
-                if (!a || !b) return null;
-                const backwards = b.x <= a.x + 230;
-                return (
-                  <button
-                    key={edge.id}
-                    type="button"
-                    aria-label={`Edit connection ${nodes.find((n) => n.id === edge.source)?.label} to ${nodes.find((n) => n.id === edge.target)?.label}`}
-                    title={edge.label}
-                    onClick={() => editEdge(edge)}
-                    className="pointer-events-auto absolute max-w-56 -translate-x-1/2 -translate-y-1/2 line-clamp-2 whitespace-normal break-words rounded-md border bg-background px-2.5 py-1 text-xs text-muted-foreground shadow-sm hover:border-primary hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                    style={{ left: (a.x + 230 + b.x) / 2, top: (a.y + b.y) / 2 + 48 + (backwards ? 120 : 0) }}
-                  >
-                    {edge.label}
-                  </button>
-                );
-              })}
-              {nodes.map((n) => {
-                const p = positions[n.id];
-                return (
-                  <div key={n.id} data-workflow-node={n.id} className="absolute pointer-events-auto" style={{ left: p.x, top: p.y, width: 230 }}>
-                    <button
-                      type="button"
-                      aria-label={`Edit node ${n.label}`}
-                      onPointerDown={(e) => {
-                        suppressClick.current = false;
-                        if (connecting) return;
-                        drag.current = { id: n.id, x: e.clientX, y: e.clientY, originX: p.x, originY: p.y, moved: false };
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                      }}
-                      onClick={() => {
-                        if (suppressClick.current) {
+                {nodes.map((n) => {
+                  const p = positions[n.id];
+                  return (
+                    <div key={n.id} data-workflow-node={n.id} className="absolute pointer-events-auto" style={{ left: p.x, top: p.y, width: 230 }}>
+                      <button
+                        type="button"
+                        aria-label={`Edit node ${n.label}`}
+                        onPointerDown={(e) => {
                           suppressClick.current = false;
-                          return;
-                        }
-                        if (connecting) connect(n.id);
-                        else setSelected(n.id);
-                      }}
-                      onKeyDown={(e) => {
-                        const shifts: Record<string, [number, number]> = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] };
-                        if (shifts[e.key]) {
-                          e.preventDefault();
-                          const [dx, dy] = shifts[e.key];
-                          moveNode(n.id, { x: p.x + dx, y: p.y + dy });
-                        }
-                      }}
-                      className={`flex h-24 w-full cursor-grab flex-col justify-center gap-2 rounded-xl border bg-background px-5 text-left shadow-sm active:cursor-grabbing hover:border-primary focus-visible:outline-2 focus-visible:outline-ring ${connecting && connecting !== n.id ? 'border-primary' : ''}`}
-                    >
-                      <span className="flex w-full items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{n.label}</span>
-                        {graph.entryNodeId === n.id && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">Start</span>}
-                      </span>
-                      <span className="w-full truncate text-xs text-muted-foreground">
-                        {n.model || 'Default model'}
-                        {n.reasoningEffort ? ` · ${n.reasoningEffort}` : ''}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Connect into ${n.label}`}
-                      className="absolute -left-3 top-9 flex size-6 items-center justify-center rounded-full border bg-background hover:border-primary focus-visible:outline-2 focus-visible:outline-ring"
-                      onClick={() => connect(n.id)}
-                    >
-                      <span className="size-2 rounded-full bg-muted-foreground" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Connect from ${n.label}`}
-                      aria-pressed={connecting === n.id}
-                      className="absolute -right-3 top-9 flex size-6 touch-none items-center justify-center rounded-full border bg-background hover:border-primary focus-visible:outline-2 focus-visible:outline-ring"
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        setConnecting(n.id);
-                        setCursor(point(e));
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                      }}
-                      onClick={() => {
-                        if (suppressClick.current) {
-                          suppressClick.current = false;
-                          return;
-                        }
-                        setConnecting(n.id);
-                      }}
-                    >
-                      <span className="size-2 rounded-full bg-primary" />
-                    </button>
+                          if (connecting) return;
+                          drag.current = { id: n.id, x: e.clientX, y: e.clientY, originX: p.x, originY: p.y, moved: false };
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                        }}
+                        onClick={() => {
+                          if (suppressClick.current) {
+                            suppressClick.current = false;
+                            return;
+                          }
+                          if (connecting) connect(n.id);
+                          else setSelected(n.id);
+                        }}
+                        onKeyDown={(e) => {
+                          const shifts: Record<string, [number, number]> = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] };
+                          if (shifts[e.key]) {
+                            e.preventDefault();
+                            const [dx, dy] = shifts[e.key];
+                            moveNode(n.id, { x: p.x + dx, y: p.y + dy });
+                          }
+                        }}
+                        className={`flex h-24 w-full cursor-grab flex-col justify-center gap-2 rounded-xl border bg-background px-5 text-left shadow-sm active:cursor-grabbing hover:border-primary focus-visible:outline-2 focus-visible:outline-ring ${connecting && connecting !== n.id ? 'border-primary' : ''}`}
+                      >
+                        <span className="flex w-full items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{n.label}</span>
+                          {graph.entryNodeId === n.id && (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">Start</span>
+                          )}
+                        </span>
+                        <span className="w-full truncate text-xs text-muted-foreground">
+                          {n.model || 'Default model'}
+                          {n.reasoningEffort ? ` · ${n.reasoningEffort}` : ''}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Connect into ${n.label}`}
+                        className="absolute -left-3 top-9 flex size-6 items-center justify-center rounded-full border bg-background hover:border-primary focus-visible:outline-2 focus-visible:outline-ring"
+                        onClick={() => connect(n.id)}
+                      >
+                        <span className="size-2 rounded-full bg-muted-foreground" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Connect from ${n.label}`}
+                        aria-pressed={connecting === n.id}
+                        className="absolute -right-3 top-9 flex size-6 touch-none items-center justify-center rounded-full border bg-background hover:border-primary focus-visible:outline-2 focus-visible:outline-ring"
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          setConnecting(n.id);
+                          setCursor(point(e));
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                        }}
+                        onClick={() => {
+                          if (suppressClick.current) {
+                            suppressClick.current = false;
+                            return;
+                          }
+                          setConnecting(n.id);
+                        }}
+                      >
+                        <span className="size-2 rounded-full bg-primary" />
+                      </button>
+                    </div>
+                  );
+                })}
+                {!nodes.length && (
+                  <div className="absolute left-16 top-28 max-w-sm">
+                    <h2 className="text-xl font-semibold">Start with one agent.</h2>
+                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Add a node, give it instructions, then connect it to the next step.</p>
                   </div>
-                );
-              })}
-              {!nodes.length && (
-                <div className="absolute left-16 top-28 max-w-sm">
-                  <h2 className="text-xl font-semibold">Start with one agent.</h2>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Add a node, give it instructions, then connect it to the next step.</p>
-                </div>
-              )}
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-end justify-between gap-4">
+            <p role="status" className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
+              {connecting ? 'Connect to another node · Esc to cancel' : 'Drag nodes to move · Drag connectors to link · Click an edge to name it'}
+            </p>
+            <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-md border bg-background p-1">
+              <Button size="icon" variant="ghost" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.3, z - 0.1))}>
+                <MinusIcon />
+              </Button>
+              <span className="w-10 text-center text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
+              <Button size="icon" variant="ghost" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + 0.1))}>
+                <PlusIcon />
+              </Button>
+              <Button size="icon" variant="ghost" aria-label="Fit graph" onClick={fit}>
+                <MaximizeIcon />
+              </Button>
             </div>
           </div>
         </div>
-        <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-end justify-between gap-4">
-          <p role="status" className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
-            {connecting ? 'Connect to another node · Esc to cancel' : 'Drag nodes to move · Drag connectors to link · Click an edge to name it'}
-          </p>
-          <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-md border bg-background p-1">
-            <Button size="icon" variant="ghost" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.3, z - 0.1))}>
-              <MinusIcon />
-            </Button>
-            <span className="w-10 text-center text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
-            <Button size="icon" variant="ghost" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + 0.1))}>
-              <PlusIcon />
-            </Button>
-            <Button size="icon" variant="ghost" aria-label="Fit graph" onClick={fit}>
-              <MaximizeIcon />
-            </Button>
-          </div>
-        </div>
+        {assistantOpen && (
+          <GraphAssistant
+            graph={graph}
+            disabled={busy || !!selectedNode || !!selectedEdge || !!imported || templateOpen}
+            onApply={(next) => {
+              setGraph(next);
+              setSelected(null);
+              setEdgeId(null);
+              setConnecting(null);
+              setCursor(null);
+            }}
+          />
+        )}
       </div>
       {selectedNode && (
         <NodeEditor
@@ -747,7 +812,12 @@ export function WorkflowCanvas({
         />
       )}
       {selectedEdge && (
-        <EditorDialog title="Name this connection" onClose={() => { if (edgeEdits.confirmDiscard()) setEdgeId(null); }}>
+        <EditorDialog
+          title="Name this connection"
+          onClose={() => {
+            if (edgeEdits.confirmDiscard()) setEdgeId(null);
+          }}
+        >
           <form
             className="space-y-5"
             onSubmit={(e) => {
@@ -802,7 +872,7 @@ export function WorkflowCanvas({
 export function WorkspaceGraphPage({ project }: { project: ProjectView }) {
   const [templates, setTemplates] = useState<{ id: string; name: string; graph: Workflow }[]>([]);
   const [templateId, setTemplateId] = useState('default');
-  const graph = templates.find(template => template.id === templateId)?.graph;
+  const graph = templates.find((template) => template.id === templateId)?.graph;
   const [error, setError] = useState('');
   const [promptOpen, setPromptOpen] = useState(false);
   useEffect(() => {
@@ -833,12 +903,26 @@ export function WorkspaceGraphPage({ project }: { project: ProjectView }) {
           <h2 className="text-sm font-semibold">Make this graph yours with shared instructions</h2>
           <p className="mt-1 text-sm text-muted-foreground">Add your project context, coding conventions, and test commands once. Every stage uses them.</p>
         </div>
-        <Button variant="outline" onClick={() => setPromptOpen(true)}>Edit shared instructions<ArrowRightIcon /></Button>
+        <Button variant="outline" onClick={() => setPromptOpen(true)}>
+          Edit shared instructions
+          <ArrowRightIcon />
+        </Button>
       </section>
       <label className="flex items-center gap-3 border-b px-5 py-3 text-sm">
         Workspace graph template
-        <select aria-label="Workspace graph template" className={selectClass} value={templateId} onChange={event => { if (confirmGraphNavigation()) setTemplateId(event.target.value); }}>
-          {templates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
+        <select
+          aria-label="Workspace graph template"
+          className={selectClass}
+          value={templateId}
+          onChange={(event) => {
+            if (confirmGraphNavigation()) setTemplateId(event.target.value);
+          }}
+        >
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
         </select>
       </label>
       <WorkflowCanvas
@@ -850,8 +934,8 @@ export function WorkspaceGraphPage({ project }: { project: ProjectView }) {
         initial={graph}
         onSave={async (graph) => {
           if (templateId === 'default') await gantry.saveWorkspaceWorkflow(project.id, graph);
-          else await gantry.saveWorkspaceWorkflowTemplate(project.id, templates.find(template => template.id === templateId)!.name, graph, templateId);
-          setTemplates(items => items.map(template => template.id === templateId ? { ...template, graph } : template));
+          else await gantry.saveWorkspaceWorkflowTemplate(project.id, templates.find((template) => template.id === templateId)!.name, graph, templateId);
+          setTemplates((items) => items.map((template) => (template.id === templateId ? { ...template, graph } : template)));
         }}
         header={
           <div>

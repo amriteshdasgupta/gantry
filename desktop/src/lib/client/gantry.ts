@@ -50,6 +50,7 @@ export interface TicketView {
   projectId: string;
   title: string;
   description: string;
+  assistantName?: string;
   status: string;
   scope: string;
   scopes: string[];
@@ -155,7 +156,7 @@ export interface StatusView {
   tickets: TicketView[];
   previews: PreviewView[];
   pulls: PullGroupView[];
-  remote: { projectId: string; repositories: Record<string, { checkedAt: number; error: string | null }> }[];
+  remote: { projectId: string; repositories: Record<string, { checkedAt: number; error: string | null; pullError?: string | null }> }[];
   jobs: JobView[];
 }
 
@@ -182,7 +183,18 @@ export interface CleanupResult {
   assessment: CleanupAssessment;
 }
 
+export type VcsProvider = 'github' | 'gitlab' | 'bitbucket';
+export interface VcsView {
+  providers: Record<VcsProvider, { hasToken: boolean }>;
+  gitlabUrl: string;
+  repositories: { projectId: string; projectName: string; repositoryId: string; remoteUrl: string; detected: VcsProvider; provider: VcsProvider; chosen: boolean; error: string | null }[];
+}
+
 export const gantry = {
+  vcs: (): Promise<VcsView> => request('/api/vcs', 'GET'),
+  saveVcs: (input: { repository?: { projectId: string; repositoryId: string; provider: VcsProvider | null }; credentials?: { provider: VcsProvider; token?: string | null; gitlabUrl?: string | null } }): Promise<{ ok: boolean }> =>
+    request('/api/vcs', 'POST', input),
+  testVcs: (provider: VcsProvider): Promise<{ ok: boolean; user: string }> => request('/api/vcs/test', 'POST', { provider }),
   assessCleanup: (id: string): Promise<CleanupAssessment> => request(`/api/tickets/${id}/worktree-cleanup`, 'GET'),
   cleanupWorktrees: (id: string, checkouts: CleanupAssessment['checkouts']): Promise<CleanupResult> =>
     request(`/api/tickets/${id}/worktree-cleanup`, 'POST', { confirm: true, checkouts }),
@@ -197,11 +209,11 @@ export const gantry = {
   saveWorkspacePrompt: (id: string, prompt: string): Promise<{ prompt: string }> => request(`/api/projects/${id}/chat-prompt`, 'POST', { prompt }),
   status: (): Promise<StatusView> => request('/api/status', 'GET'),
   addProject: (workspace: string): Promise<{ ok: boolean; projectId: string }> => request('/api/projects', 'POST', { workspace, initialize: true }),
-  removeProject: (projectId: string): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}`, 'DELETE'),
+  removeProject: (projectId: string, deleteData: boolean): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}`, 'DELETE', { confirm: true, deleteData }),
   refreshProject: (projectId: string): Promise<{ ok: boolean }> => request(`/api/projects/${projectId}/refresh`, 'POST', {}),
   createTicket: (projectId: string, input: { title: string; description?: string; scope?: string; scopes?: string[]; branch?: string; additions?: string | null; workflowTemplateId?: string; graph?: Workflow }): Promise<TicketView> =>
     request(`/api/projects/${projectId}/tickets`, 'POST', input),
-  updateTicket: (ticketId: string, input: { title?: string; description?: string; status?: string; scope?: string; scopes?: string[]; branch?: string; additions?: string | null }): Promise<TicketView> =>
+  updateTicket: (ticketId: string, input: { title?: string; assistantName?: string; description?: string; status?: string; scope?: string; scopes?: string[]; branch?: string; additions?: string | null }): Promise<TicketView> =>
     request(`/api/tickets/${ticketId}/update`, 'POST', input),
   setTicketOutcome: (ticketId: string, outcome: string): Promise<TicketView> =>
     request(`/api/tickets/${ticketId}/outcome`, 'POST', { outcome }),

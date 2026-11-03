@@ -6,15 +6,15 @@ Gantry starts coding agents in the background, parses their session ids from str
 
 Every adapter reports a serializable `AgentCapabilities` object (`packages/shared/src/agent.ts`) that the dashboard renders directly:
 
-| Field | Values | Meaning |
-| ----- | ------ | ------- |
-| `resumeMode` | `deeplink` \| `terminal` \| `unsupported` | How a session is reopened: a native deep link, an attached terminal command, or not at all. |
-| `takeover` | boolean | Can Gantry interrupt a background run mid-turn? |
-| `interruptMode` | `process-group` \| `process` \| `unsupported` | How the interrupt is delivered. Gantry always uses the process group. |
-| `deepLinkScheme` | string or null | e.g. `codex://threads`. |
-| `streaming` | boolean | Structured session events stream to the run log. |
-| `discoveredVia` | string or null | How the binary was found: `config`, `PATH`, or a well-known install path. |
-| `notes` | string[] | Plain-language explanation shown in the UI. |
+| Field            | Values                                        | Meaning                                                                                     |
+| ---------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `resumeMode`     | `deeplink` \| `terminal` \| `unsupported`     | How a session is reopened: a native deep link, an attached terminal command, or not at all. |
+| `takeover`       | boolean                                       | Can Gantry interrupt a background run mid-turn?                                             |
+| `interruptMode`  | `process-group` \| `process` \| `unsupported` | How the interrupt is delivered. Gantry always uses the process group.                       |
+| `deepLinkScheme` | string or null                                | e.g. `codex://threads`.                                                                     |
+| `streaming`      | boolean                                       | Structured session events stream to the run log.                                            |
+| `discoveredVia`  | string or null                                | How the binary was found: `config`, `PATH`, or a well-known install path.                   |
+| `notes`          | string[]                                      | Plain-language explanation shown in the UI.                                                 |
 
 The rule: **what an adapter cannot do is reported as such, not approximated.** `unavailableCapabilities` produces the honest "not available" object with an explanatory note.
 
@@ -26,7 +26,7 @@ The rule: **what an adapter cannot do is reported as such, not approximated.** `
 export interface AgentAdapter {
   readonly id: string;
   readonly label: string;
-  readonly promptNotes: string;              // appended to every startup prompt
+  readonly promptNotes: string; // appended to every startup prompt
   resolveBinary(override?: string): Promise<{ path: string | null; via: string | null }>;
   capabilities(binaryPath: string | null): Promise<AgentCapabilities>;
   buildStart(context: AgentStartContext): SpawnSpec;
@@ -124,9 +124,16 @@ Runs are spawned detached with a minimal environment: your inherited environment
      async capabilities(binaryPath: string | null) {
        if (!binaryPath) return unavailableCapabilities(this.id, this.label, ['Install My Agent, or set agents.myagent.binary.']);
        return {
-         id: this.id, label: this.label, available: true, discoveredVia: binaryPath,
-         version: null, resumeMode: 'terminal', takeover: true, interruptMode: 'process-group',
-         deepLinkScheme: null, streaming: false,
+         id: this.id,
+         label: this.label,
+         available: true,
+         discoveredVia: binaryPath,
+         version: null,
+         resumeMode: 'terminal',
+         takeover: true,
+         interruptMode: 'process-group',
+         deepLinkScheme: null,
+         streaming: false,
          notes: ['Session ids are parsed from run output when My Agent prints them.'],
        };
      }
@@ -139,8 +146,12 @@ Runs are spawned detached with a minimal environment: your inherited environment
        return { argv: [context.binary, '--resume', sessionId], cwd: context.workspace, claim: 'myagent --resume' };
      }
 
-     deepLink() { return null; }
-     parseSessionLine(line: string) { return /session (\S+)/.exec(line)?.[1] ?? null; }
+     deepLink() {
+       return null;
+     }
+     parseSessionLine(line: string) {
+       return /session (\S+)/.exec(line)?.[1] ?? null;
+     }
    }
    ```
 
@@ -176,3 +187,39 @@ In a ticket's PR review, click **Review loop**, choose a stage in the saved exec
 Gantry refreshes GitHub file threads (including outdated locations), general comments, and review bodies once when you restart. A failed refresh leaves the workflow untouched and shows an error to retry. It also captures the PR's local review discussion and your optional note. The latest three bounded snapshots persist with the execution and are supplied to subsequent stages and graph routing as external review data; oversized bodies and older entries can be omitted. Opening or reloading the picker reads local execution state without polling GitHub. A PR associated with multiple active tickets must be opened in the intended ticket's review space.
 
 The desktop's local `GET /api/review-loop?targetId=owner/repo/pull/42&spaceId=...` resolves that association and returns its execution. `POST /api/review-loop` accepts `targetId`, optional `spaceId`, `nodeId`, optional `message` (up to 4,000 characters), `expectedUpdatedAt`, and `confirm: true`. The server resolves the ticket itself, checks the execution revision and active writers, captures feedback, then queues the correction under the existing execution lock.
+
+## Graph assistant
+
+In a workspace graph, a new ticket's graph, or an editable ticket graph, select
+**Ask AI** to open the graph assistant beside the canvas. Choose a configured
+provider (or use the default) and describe the workflow or change you want, for
+example: “Add a review stage with a correction loop back to implementation.”
+The assistant proposes a complete graph including stage instructions and labelled
+connections. Follow-up messages include the latest draft and recent conversation.
+
+Select **Apply proposal** to update the visible draft, then inspect or manually
+edit its nodes and connections. **Undo assistant change** restores the prior draft
+until another edit changes it. Use the editor's normal save/create action to
+persist it. Workspace graph saves affect future tickets; ticket edits affect only
+that ticket. Existing restrictions on editing running or completed tickets apply.
+
+You can continue editing while a response is pending. If the draft changes, the
+proposal is marked stale and cannot replace your edits; send a fresh request.
+**Stop**, closing the assistant, or leaving the editor cancels the pending request.
+Errors and invalid provider output leave the draft intact.
+
+Requests send the current graph (including prompts and model settings), your
+request, and up to twelve recent messages to the selected provider. Conversations
+are local to the open panel. The assistant uses an isolated temporary directory
+and the provider's restricted planning mode, with no workflow execution or graph
+persistence tools. Requests time out after two minutes and at most three run
+concurrently. It does not start stages or enable automatic runs on its own.
+
+The desktop's local `POST /api/graph-assistant` accepts `graph`, `prompt`, optional
+`providerId`, and optional `history` (`role` and `text`, up to twelve messages).
+Draft inputs retain field validation and size limits, but may have disconnected
+nodes or missing start nodes and references so the assistant can repair them.
+It returns `{ message, graph }` only after validating the complete replacement
+directed graph, including reachability with the draft's automatic-run setting.
+The endpoint is same-origin/local-only and does not write workspace or ticket
+state. The editor keeps the automatic-run switch under manual control.

@@ -47,6 +47,10 @@ const RUN_TIMEOUT_MS = 10 * 60 * 1000;
 
 const fileFor = (id: string) => path.join(DIRS.chats, `${safeName(id)}.json`);
 
+export function forgetChat(id: string) {
+  fs.rmSync(fileFor(id), { force: true });
+}
+
 export function loadChat(id: string): ChatFile | null {
   try {
     const chat = JSON.parse(fs.readFileSync(fileFor(id), "utf8")) as ChatFile;

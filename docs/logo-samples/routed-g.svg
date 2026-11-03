@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="currentColor" role="img" aria-labelledby="title description">
+  <title id="title">Gantry — Routed G concept</title>
+  <desc id="description">An open, rounded rectangular G with a substantial inward stage terminal.</desc>
+  <path
+    d="M 26 10 H 22 V 9 Q 22 8 21 8 H 11 Q 9 8 9 10 V 22 Q 9 24 11 24 H 21 Q 23 24 23 22 V 20 H 17 V 16 H 27 V 22 Q 27 28 21 28 H 11 Q 5 28 5 22 V 10 Q 5 4 11 4 H 21 Q 26 4 26 9 Z"
+  />
+</svg>

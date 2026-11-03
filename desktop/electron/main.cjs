@@ -5,6 +5,8 @@ const fs = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
 
+const APP_ICON = path.join(__dirname, "icon.png");
+
 const DEV_URL = process.env.PR_LENS_DEV_URL; // e.g. http://localhost:3000 while developing
 let server = null;
 let gantryServer = null;
@@ -181,6 +183,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: "Gantry",
+    icon: APP_ICON,
     // No title bar: the app's own 48px top bar is the title bar, with the traffic lights
     // centred in it (trafficLightPosition only applies to "hidden", not "hiddenInset").
     titleBarStyle: process.platform === "darwin" ? "hidden" : "default",
@@ -275,6 +278,7 @@ ipcMain.handle("pick-folder", async (event) => {
 });
 
 app.whenReady().then(async () => {
+  if (process.platform === "darwin") app.dock.setIcon(APP_ICON);
   if (app.isPackaged) app.setAsDefaultProtocolClient("pr-lens");
   try {
     // Review remains usable even if an existing Gantry service cannot start.

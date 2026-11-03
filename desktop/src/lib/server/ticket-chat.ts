@@ -4,7 +4,7 @@ import { httpError } from "./http";
 export interface TicketWorkspace {
   prompt?: string;
   stagePrompt?: string;
-  ticket: { id: string; title: string; description: string; branch: string; status: string; additions: string | null };
+  ticket: { id: string; title: string; assistant_name?: string; description: string; branch: string; status: string; additions: string | null };
   project: { id: string; name: string; workspace: string };
   checkouts: { repositoryId: string; path: string }[];
 }

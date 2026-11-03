@@ -20,7 +20,7 @@ test('Settings lists the installed terminal apps and saves the choice', async ({
   expect(settings.available.filter((t: { id: string }) => stand_ins.some((s) => s.id === t.id))).toEqual(stand_ins);
   expect(settings.terminalApp).toBe(stand_in.id);
 
-  await page.goto('/settings');
+  await page.goto('/settings?tab=chats');
   await expect(page.getByRole('heading', { name: 'Chats open in herdr' })).toBeVisible();
   const section = page.locator('section', { has: page.getByRole('heading', { name: 'Chats open in herdr' }) });
   for (const t of settings.available) await expect(section.getByRole('button', { name: t.label, exact: true })).toBeVisible();

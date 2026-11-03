@@ -96,7 +96,7 @@ export function registerProjectRow(db: Database, project: LoadedProject): Regist
   const now = new Date().toISOString();
   const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(project.config.project.id) as { id: string } | undefined;
   if (existing) {
-    db.prepare('UPDATE projects SET name=?, workspace=?, config_path=?, default_agent=?, default_prompt_template=?, updated_at=? WHERE id=?').run(
+    db.prepare('UPDATE projects SET name=?, workspace=?, config_path=?, default_agent=?, default_prompt_template=?, updated_at=?, removed_at=NULL WHERE id=?').run(
       project.config.project.name,
       project.workspace,
       project.configPath,
@@ -123,17 +123,12 @@ export function registerProjectRow(db: Database, project: LoadedProject): Regist
 }
 
 export function listRegisteredWorkspaces(db: Database): string[] {
-  return (db.prepare('SELECT workspace FROM projects ORDER BY created_at').all() as { workspace: string }[]).map((row) => row.workspace);
+  return (db.prepare('SELECT workspace FROM projects WHERE removed_at IS NULL ORDER BY created_at').all() as { workspace: string }[]).map((row) => row.workspace);
 }
 
 export function getRegisteredProject(db: Database, id: string): { workspace: string } | null {
   const row = db.prepare('SELECT workspace FROM projects WHERE id = ?').get(id) as { workspace: string } | undefined;
   return row ?? null;
-}
-
-export function removeProjectRow(db: Database, id: string): boolean {
-  const result = db.prepare('DELETE FROM projects WHERE id = ?').run(id);
-  return Number(result.changes) > 0;
 }
 
 /** Absolute path of a repository inside its project workspace. */
