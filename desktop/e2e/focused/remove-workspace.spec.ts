@@ -25,7 +25,7 @@ test('Remove workspace keeps data for re-adding, or deletes it', async ({ page }
   const openDialog = async (p: Page) => {
     await p.getByRole('button', { name: `Actions for ${NAME}` }).click();
     await p.getByRole('menuitem', { name: 'Remove workspace' }).click();
-    return p.getByRole('dialog', { name: `Remove ${NAME}?` });
+    return p.getByRole('dialog', { name: `Remove ${NAME} from Gantry?` });
   };
   let projectId = '';
   try {
@@ -36,8 +36,8 @@ test('Remove workspace keeps data for re-adding, or deletes it', async ({ page }
     await expect(entry).toBeVisible();
 
     const dialog = await openDialog(page);
-    const keep = dialog.getByRole('button', { name: 'Remove and keep data' });
-    const erase = dialog.getByRole('button', { name: 'Remove and delete data' });
+    const keep = dialog.getByRole('button', { name: 'Keep data' });
+    const erase = dialog.getByRole('button', { name: 'Delete data' });
     await expect(keep).toBeVisible();
     await expect(erase).toBeVisible();
 
@@ -45,7 +45,7 @@ test('Remove workspace keeps data for re-adding, or deletes it', async ({ page }
     await expect(dialog).toHaveCount(0);
     await expect(entry).toBeVisible();
 
-    await (await openDialog(page)).getByRole('button', { name: 'Remove and keep data' }).click();
+    await (await openDialog(page)).getByRole('button', { name: 'Keep data' }).click();
     await expect(entry).toHaveCount(0);
     expect((await status()).projects.some(p => p.id === projectId)).toBe(false);
 
@@ -55,7 +55,7 @@ test('Remove workspace keeps data for re-adding, or deletes it', async ({ page }
 
     const second = await openDialog(page);
     await page.screenshot({ path: test.info().outputPath('remove-workspace-dialog.png') });
-    await second.getByRole('button', { name: 'Remove and delete data' }).click();
+    await second.getByRole('button', { name: 'Delete data' }).click();
     await expect(entry).toHaveCount(0);
 
     await connect();
