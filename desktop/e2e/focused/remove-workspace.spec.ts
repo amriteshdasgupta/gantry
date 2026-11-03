@@ -25,7 +25,7 @@ test('Remove workspace keeps data for re-adding, or deletes it', async ({ page }
   const openDialog = async (p: Page) => {
     await p.getByRole('button', { name: `Actions for ${NAME}` }).click();
     await p.getByRole('menuitem', { name: 'Remove workspace' }).click();
-    return p.getByRole('dialog', { name: `Remove ${NAME} from Gantry?` });
+    return p.getByRole('dialog', { name: `Remove "${NAME}" from Gantry?` });
   };
   let projectId = '';
   try {

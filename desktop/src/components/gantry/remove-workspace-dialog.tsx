@@ -21,8 +21,8 @@ export function RemoveWorkspaceDialog({ project, onClose, onRemoved }: { project
     catch (e) { setError((e as Error).message); setBusy(false); }
   }
   return <dialog ref={ref} aria-labelledby="remove-workspace-title" onCancel={e => { e.preventDefault(); if (!busy) onClose(); }} className="fixed inset-0 m-auto max-h-[85dvh] w-[min(36rem,calc(100vw-32px))] overflow-auto rounded-xl border bg-popover p-6 text-popover-foreground shadow-xl backdrop:bg-black/50">
-    <h2 id="remove-workspace-title" className="text-lg font-semibold">Remove {project.name} from Gantry?</h2>
-    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Any running previews will stop. Your files in {project.workspace} won&apos;t be touched, including repositories, worktrees and gantry.yaml.</p>
+    <h2 id="remove-workspace-title" className="text-lg font-semibold">Remove &quot;{project.name}&quot; from Gantry?</h2>
+    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Any running previews will stop. Your files in {project.workspace} won&apos;t be touched (including repositories, worktrees and gantry.yaml).</p>
     <div className="mt-4 grid gap-4 sm:grid-cols-2">
       <div>
         <Button variant="outline" className="w-full" disabled={busy} onClick={() => void remove(false)}>Keep data</Button>
