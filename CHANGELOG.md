@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Remove a workspace from its sidebar menu, either keeping its Gantry data so adding it back restores everything, or deleting that data. Repositories, worktrees and `gantry.yaml` are never touched.
 - Give tickets persistent human assistant names and a workspace voice console: address master chats by name, dictate with Wispr Flow, transcribe with a configured local Parakeet/Whisper-compatible service, hear local spoken replies, and inspect, pause or resume in-progress workflows together.
 - Create and edit workspace and ticket graph drafts with an inline AI assistant, using configured providers to propose nodes, stage prompts, and routing conditions. Keep the canvas editable, reject stale proposals, and undo assistant changes before saving.
 

@@ -60,6 +60,12 @@ export class VcsStore {
     this.save();
   }
 
+  /** Tokens are shared across workspaces, so only this workspace's provider choices go. */
+  forgetProject(projectId: string): void {
+    for (const key of Object.keys(this.data.repositories)) if (key.startsWith(`${projectId}:`)) delete this.data.repositories[key];
+    this.save();
+  }
+
   setCredentials(provider: Provider, token: string | null | undefined, gitlabUrl?: string | null): void {
     if (token === null) delete this.data.tokens[provider];
     else if (token) this.data.tokens[provider] = token.trim();

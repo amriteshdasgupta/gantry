@@ -80,11 +80,6 @@ export class GantryApp {
     return project;
   }
 
-  async removeWorkspace(projectId: string): Promise<boolean> {
-    const { removeProjectRow } = await import('./projects/registry.js');
-    return removeProjectRow(this.db, projectId);
-  }
-
   private registerJobHandlers(): void {
     this.jobs.register(
       'start-ticket',

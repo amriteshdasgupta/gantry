@@ -72,7 +72,7 @@ describe('workflow graph', () => {
   test('persists independent ticket snapshots and detects lost updates', () => {
     const db = openDatabase(path.join(dir, 'tickets.db'));
     try {
-      db.prepare('INSERT INTO projects VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+      db.prepare('INSERT INTO projects (id, name, workspace, config_path, default_agent, default_prompt_template, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
         'test',
         'TEST_workspace_graph',
         dir,
