@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-03
+
 ### Added
 
 - Remove a workspace from its sidebar menu, either keeping its Gantry data so adding it back restores everything, or deleting that data. Repositories, worktrees and `gantry.yaml` are never touched.
