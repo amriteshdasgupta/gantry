@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-03
+
 ### Added
 
 - Give tickets persistent human assistant names and a workspace voice console: address master chats by name, dictate with Wispr Flow, transcribe with a configured local Parakeet/Whisper-compatible service, hear local spoken replies, and inspect, pause or resume in-progress workflows together.
